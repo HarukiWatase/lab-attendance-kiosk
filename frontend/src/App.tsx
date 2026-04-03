@@ -66,11 +66,39 @@ const defaultUserDirectory: Record<string, string> = {
   ...Object.fromEntries(defaultAnalytics.map((u) => [u.userId, u.displayName]))
 };
 
+function TabLink({
+  active,
+  onClick,
+  children
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative pb-3 text-sm font-medium tracking-[0.12em] transition-colors duration-300 ease-out ${
+        active ? "text-neutral-900" : "text-neutral-400 hover:text-neutral-600"
+      }`}
+    >
+      {children}
+      <span
+        className={`absolute bottom-0 left-0 right-0 h-px origin-left bg-neutral-900 transition-transform duration-500 ease-smooth ${
+          active ? "scale-x-100" : "scale-x-0"
+        }`}
+        aria-hidden
+      />
+    </button>
+  );
+}
+
 export default function App() {
   const [tab, setTab] = useState<Tab>("scan");
   const [state, setState] = useState<ViewState>("idle");
   const [userId, setUserId] = useState("");
-  const [message, setMessage] = useState("▶ QRコードを かざしてね");
+  const [message, setMessage] = useState("QRコードをかざしてください");
   const [logs, setLogs] = useState<ScanLog[]>([]);
   const [analyticsRows, setAnalyticsRows] = useState<AnalyticsRow[]>(
     SHOW_DEMO_FALLBACK ? defaultAnalytics : []
@@ -83,7 +111,7 @@ export default function App() {
   const scanInputRef = useRef<HTMLInputElement>(null);
 
   const hint = useMemo(() => {
-    if (state === "processing") return "つうしんちゅう...";
+    if (state === "processing") return "処理しています";
     return message;
   }, [state, message]);
 
@@ -159,7 +187,7 @@ export default function App() {
         hasError = true;
       }
       if (hasError) {
-        setViewDataError("分析データの取得に失敗しました。表示内容を確認してください。");
+        setViewDataError("データを取得できませんでした。");
       } else {
         setViewDataError("");
       }
@@ -171,7 +199,7 @@ export default function App() {
   const resetLater = () => {
     window.setTimeout(() => {
       setState("idle");
-      setMessage("▶ QRコードを かざしてね");
+      setMessage("QRコードをかざしてください");
     }, 3000);
   };
 
@@ -217,7 +245,7 @@ export default function App() {
         if (res.status === 409) {
           setState("blocked");
           setMessage(
-            `${actor} は れんぞく だこく は できないよ。あと ${body?.detail?.cooldown_remaining_sec ?? "?"} びょう まってね`
+            `連続打刻はできません。${body?.detail?.cooldown_remaining_sec ?? "?"}秒後にお試しください。`
           );
           pushLog({
             at: new Date().toLocaleTimeString("ja-JP"),
@@ -227,7 +255,7 @@ export default function App() {
           });
         } else {
           setState("error");
-          setMessage(body?.detail?.message ?? "つうしんエラー");
+          setMessage(body?.detail?.message ?? "通信エラーが発生しました。");
           pushLog({
             at: new Date().toLocaleTimeString("ja-JP"),
             actor,
@@ -242,9 +270,9 @@ export default function App() {
       const displayName = resolveDisplayName(data.user_id);
       const resultMessage =
         data.result === "success_in"
-          ? `${displayName} が けんきゅうしつ に あらわれた！`
+          ? `${displayName} — 入室を記録しました`
           : data.result === "success_out"
-            ? `${displayName} は 研究を終えた`
+            ? `${displayName} — 退室を記録しました`
             : data.message;
       setState(data.result);
       setMessage(resultMessage);
@@ -258,7 +286,7 @@ export default function App() {
     } catch {
       setUserId("");
       setState("error");
-      setMessage("つうしん エラー");
+      setMessage("通信エラーが発生しました。");
       pushLog({
         at: new Date().toLocaleTimeString("ja-JP"),
         actor,
@@ -270,31 +298,35 @@ export default function App() {
   };
 
   return (
-    <main className="min-h-screen text-white p-6 font-dot mc-bg">
-      <div className="mx-auto max-w-3xl pixel-panel p-6">
-        <h1 className="text-3xl mb-6 text-emerald-200 drop-shadow">勤怠管理システム</h1>
-        <div className="mb-6 flex gap-2">
-          <button
-            onClick={() => setTab("scan")}
-            className={`pixel-btn px-4 py-2 ${tab === "scan" ? "pixel-btn-active" : ""}`}
-          >
-            打刻
-          </button>
-          <button
-            onClick={() => setTab("analytics")}
-            className={`pixel-btn px-4 py-2 ${tab === "analytics" ? "pixel-btn-active" : ""}`}
-          >
-            分析
-          </button>
+    <main className="min-h-screen bg-[#f7f7f5] font-sans text-neutral-900">
+      <header className="border-b border-neutral-200/90">
+        <div className="mx-auto flex max-w-4xl flex-col gap-10 px-6 py-12 md:flex-row md:items-end md:justify-between md:py-14 lg:px-8">
+          <div className="animate-fade-in">
+            <p className="mb-2 text-[0.65rem] font-medium uppercase tracking-[0.28em] text-neutral-400">
+              Attendance
+            </p>
+            <h1 className="text-4xl font-light tracking-tight text-neutral-900 md:text-5xl">勤怠</h1>
+          </div>
+          <nav className="flex gap-10 md:gap-12 animate-fade-in" style={{ animationDelay: "80ms" }}>
+            <TabLink active={tab === "scan"} onClick={() => setTab("scan")}>
+              打刻
+            </TabLink>
+            <TabLink active={tab === "analytics"} onClick={() => setTab("analytics")}>
+              分析
+            </TabLink>
+          </nav>
         </div>
+      </header>
 
+      <div className="mx-auto max-w-4xl px-6 py-14 md:py-20 lg:px-8">
         {tab === "scan" && (
-          <>
-            <div className={IS_DEV ? "mb-4 flex gap-2 items-center flex-wrap" : ""}>
-              {IS_DEV && <label htmlFor="scan-capture">ユーザーID</label>}
-              {/*
-                本番: スキャナ（キーボードウェッジ）用の非表示フォーカス要素。CR+LF 想定で Enter 確定（§2.3）。
-              */}
+          <div key="scan" className="animate-fade-up space-y-16">
+            <div className={IS_DEV ? "flex flex-wrap items-end gap-6 border-b border-neutral-200/80 pb-8" : ""}>
+              {IS_DEV && (
+                <label htmlFor="scan-capture" className="text-xs font-medium tracking-wider text-neutral-500">
+                  ユーザーID
+                </label>
+              )}
               <input
                 id="scan-capture"
                 ref={scanInputRef}
@@ -304,7 +336,7 @@ export default function App() {
                 autoCorrect="off"
                 spellCheck={false}
                 aria-label={IS_DEV ? undefined : "QRコードスキャナ入力"}
-                className={IS_DEV ? "pixel-input px-3 py-2" : "sr-only"}
+                className={IS_DEV ? "input-minimal" : "sr-only"}
                 value={userId}
                 disabled={state === "processing"}
                 maxLength={12}
@@ -320,104 +352,151 @@ export default function App() {
                 }}
               />
               {IS_DEV && (
-                <>
+                <div className="flex flex-wrap gap-3">
                   <button
+                    type="button"
                     onClick={() => void doScan(false)}
                     disabled={state === "processing"}
-                    className="pixel-btn px-4 py-2 disabled:opacity-50"
+                    className="border border-neutral-900 bg-neutral-900 px-6 py-2.5 text-xs font-medium tracking-wider text-white transition-all duration-300 ease-out hover:bg-neutral-800 disabled:opacity-35"
                   >
-                    scan
+                    Scan
                   </button>
                   {CAN_USE_MOCK && (
                     <button
+                      type="button"
                       onClick={() => void doScan(true)}
                       disabled={state === "processing"}
-                      className="pixel-btn px-4 py-2 disabled:opacity-50"
+                      className="border border-neutral-300 bg-transparent px-6 py-2.5 text-xs font-medium tracking-wider text-neutral-700 transition-all duration-300 ease-out hover:border-neutral-900 hover:text-neutral-900 disabled:opacity-35"
                     >
-                      mock scan
+                      Mock
                     </button>
                   )}
-                </>
-              )}
-            </div>
-            <section className="mt-8 pixel-panel p-4 min-h-24">
-              <p className="text-[28px] leading-tight">{hint}</p>
-              {IS_DEV && <p className="mt-3 text-sm text-zinc-300">state: {state}</p>}
-            </section>
-            <section className="mt-4 pixel-panel p-4">
-              <h2 className="mb-2 text-lg">直近ログ（3件）</h2>
-              {logs.length === 0 ? (
-                <p className="text-zinc-400">まだログがありません</p>
-              ) : (
-                <div className="space-y-1 text-base">
-                  {logs.map((log, idx) => (
-                    <p key={`${log.at}-${idx}`}>
-                      {log.at} / {log.actor} / {log.result}
-                      {log.action ? ` (${log.action})` : ""}
-                    </p>
-                  ))}
                 </div>
               )}
+            </div>
+
+            <section className="min-h-[10rem]">
+              <p
+                className={`max-w-2xl text-3xl font-light leading-snug tracking-tight text-neutral-900 transition-opacity duration-500 ease-out md:text-4xl ${
+                  state === "processing" ? "opacity-45" : "opacity-100"
+                }`}
+              >
+                {hint}
+              </p>
+              {IS_DEV && (
+                <p className="mt-8 text-xs tracking-wider text-neutral-400">state · {state}</p>
+              )}
             </section>
-          </>
+
+            <section className="border-t border-neutral-200/90 pt-12">
+              <h2 className="mb-8 text-[0.65rem] font-medium uppercase tracking-[0.22em] text-neutral-400">
+                直近の記録
+              </h2>
+              {logs.length === 0 ? (
+                <p className="text-sm font-light text-neutral-400">記録はまだありません</p>
+              ) : (
+                <ul className="space-y-0 divide-y divide-neutral-200/90">
+                  {logs.map((log, idx) => (
+                    <li
+                      key={`${log.at}-${idx}`}
+                      className="flex flex-wrap items-baseline justify-between gap-4 py-4 text-sm transition-colors duration-300 first:pt-0"
+                    >
+                      <span className="tabular-nums text-neutral-400">{log.at}</span>
+                      <span className="flex-1 font-medium text-neutral-800">{log.actor}</span>
+                      <span className="text-xs tracking-wider text-neutral-500">
+                        {log.result}
+                        {log.action ? ` · ${log.action}` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
         )}
 
         {tab === "analytics" && (
-          <section className="space-y-4">
+          <div key="analytics" className="animate-fade-up space-y-16">
             {viewDataError && (
-              <div className="pixel-panel p-3 border border-red-500/70 text-red-200 text-sm">
+              <div
+                className="border-l-2 border-red-600 bg-red-50/60 py-4 pl-5 pr-6 text-sm text-red-950 transition-opacity duration-500"
+                role="alert"
+              >
                 {viewDataError}
               </div>
             )}
-            <div className="pixel-panel p-4">
-              <p className="text-sm text-zinc-300 mb-2">
-                今週のチーム平均（月曜始まり暦週の合計）
-                {weekStartLabel ? ` · 週: ${weekStartLabel}〜` : ""}
-              </p>
-              <p className="text-xl mb-2">
-                {teamAvg}h / {TARGET_HOURS}h
-              </p>
-              <div className="w-full h-4 pixel-track">
-                <div className="h-full pixel-fill-green" style={{ width: `${teamProgress}%` }} />
+
+            <section className="space-y-8">
+              <div>
+                <p className="text-[0.65rem] font-medium uppercase tracking-[0.22em] text-neutral-400">
+                  週次 · チーム平均
+                </p>
+                <p className="mt-2 text-sm text-neutral-500">
+                  月曜始まりの暦週
+                  {weekStartLabel ? ` · ${weekStartLabel}〜` : ""}
+                </p>
               </div>
-              <p className="text-xs text-zinc-400 mt-2">
-                ※ 週15hは目安。教授向け月次の判定とは別指標です。
+              <div className="flex items-baseline gap-3 tabular-nums">
+                <span className="text-5xl font-light tracking-tight md:text-6xl">{teamAvg}</span>
+                <span className="text-lg font-light text-neutral-400">/</span>
+                <span className="text-lg font-light text-neutral-400">{TARGET_HOURS}h</span>
+              </div>
+              <div className="h-px w-full overflow-hidden bg-neutral-200">
+                <div
+                  className="h-full bg-neutral-900 transition-[width] duration-700 ease-smooth"
+                  style={{ width: `${teamProgress}%` }}
+                />
+              </div>
+              <p className="max-w-xl text-xs leading-relaxed text-neutral-400">
+                週15hは目安です。教授向け月次の判定とは別の指標です。
               </p>
               {SHOW_DEMO_FALLBACK && (
-                <p className="text-xs text-zinc-400 mt-2">※ 開発モードではデモ表示になる場合があります。</p>
+                <p className="text-xs text-neutral-400">開発モードではデモデータが表示される場合があります。</p>
               )}
-            </div>
-            <div className="pixel-panel p-4">
-              <h2 className="mb-3">ユーザー別 今週の在室（15h目安）</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2">
+            </section>
+
+            <section>
+              <h2 className="mb-10 text-[0.65rem] font-medium uppercase tracking-[0.22em] text-neutral-400">
+                ユーザー別 · 今週の在室
+              </h2>
+              <div className="grid grid-cols-1 gap-px bg-neutral-200/80 md:grid-cols-2">
                 {sortedAnalytics.map((row) => {
                   const p = Math.min(100, Math.round((row.weekTotalHours / TARGET_HOURS) * 100));
                   const status = row.weekTotalHours >= 15 ? "達成" : row.weekTotalHours >= 12 ? "注意" : "要改善";
-                  const color =
+                  const barTone =
                     status === "達成"
-                      ? "pixel-fill-green"
+                      ? "bg-neutral-900"
                       : status === "注意"
-                        ? "pixel-fill-yellow"
-                        : "pixel-fill-red";
+                        ? "bg-neutral-600"
+                        : "bg-neutral-400";
                   return (
-                    <div key={row.userId} className="border border-zinc-600 p-2 bg-black/20">
-                      <div className="flex justify-between text-[13px] mb-1 leading-tight gap-2">
-                        <span className="truncate">
-                          {row.displayName} ({row.userId})
-                        </span>
-                        <span className="whitespace-nowrap">
-                          {row.weekTotalHours}h / {status}
-                        </span>
+                    <div
+                      key={row.userId}
+                      className="group bg-[#f7f7f5] p-8 transition-colors duration-300 ease-out hover:bg-white"
+                    >
+                      <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                          <p className="text-base font-medium tracking-tight text-neutral-900">{row.displayName}</p>
+                          <p className="mt-1 text-xs tabular-nums tracking-wider text-neutral-400">{row.userId}</p>
+                        </div>
+                        <div className="text-right tabular-nums">
+                          <span className="text-2xl font-light">{row.weekTotalHours}</span>
+                          <span className="ml-1 text-sm font-light text-neutral-400">h</span>
+                          <p className="mt-1 text-[0.65rem] tracking-wider text-neutral-500">{status}</p>
+                        </div>
                       </div>
-                      <div className="w-full h-2.5 pixel-track">
-                        <div className={`h-full ${color}`} style={{ width: `${p}%` }} />
+                      <div className="h-px w-full overflow-hidden bg-neutral-200">
+                        <div
+                          className={`h-full ${barTone} transition-[width] duration-700 ease-smooth`}
+                          style={{ width: `${p}%` }}
+                        />
                       </div>
                     </div>
                   );
                 })}
               </div>
-            </div>
-          </section>
+            </section>
+          </div>
         )}
       </div>
     </main>
