@@ -318,7 +318,11 @@ export default function App() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-4xl px-6 py-14 md:py-20 lg:px-8">
+      <div
+        className={`mx-auto max-w-4xl px-6 lg:px-8 ${
+          tab === "analytics" ? "py-6 md:py-8" : "py-14 md:py-20"
+        }`}
+      >
         {tab === "scan" && (
           <div key="scan" className="animate-fade-up space-y-16">
             <div className={IS_DEV ? "flex flex-wrap items-end gap-6 border-b border-neutral-200/80 pb-8" : ""}>
@@ -416,84 +420,93 @@ export default function App() {
         )}
 
         {tab === "analytics" && (
-          <div key="analytics" className="animate-fade-up space-y-16">
+          <div key="analytics" className="animate-fade-up space-y-5">
             {viewDataError && (
               <div
-                className="border-l-2 border-red-600 bg-red-50/60 py-4 pl-5 pr-6 text-sm text-red-950 transition-opacity duration-500"
+                className="border-l-2 border-red-600 bg-red-50/60 py-2 pl-3 pr-4 text-xs text-red-950 transition-opacity duration-500"
                 role="alert"
               >
                 {viewDataError}
               </div>
             )}
 
-            <section className="space-y-8">
-              <div>
-                <p className="text-[0.65rem] font-medium uppercase tracking-[0.22em] text-neutral-400">
-                  週次 · チーム平均
-                </p>
-                <p className="mt-2 text-sm text-neutral-500">
-                  月曜始まりの暦週
-                  {weekStartLabel ? ` · ${weekStartLabel}〜` : ""}
-                </p>
+            <section className="border-b border-neutral-200/90 pb-4">
+              <div className="flex flex-wrap items-end justify-between gap-3 gap-y-2">
+                <div>
+                  <p className="text-[0.6rem] font-medium uppercase tracking-[0.2em] text-neutral-400">
+                    週次平均 · 暦週（月曜始まり）
+                    {weekStartLabel ? ` · ${weekStartLabel}〜` : ""}
+                  </p>
+                  <div className="mt-1 flex items-baseline gap-2 tabular-nums">
+                    <span className="text-3xl font-light tracking-tight md:text-4xl">{teamAvg}</span>
+                    <span className="text-sm font-light text-neutral-400">/ {TARGET_HOURS}h</span>
+                  </div>
+                </div>
+                <div className="min-h-px min-w-[8rem] flex-1 basis-full sm:basis-0 sm:pb-1">
+                  <div className="h-px w-full overflow-hidden bg-neutral-200">
+                    <div
+                      className="h-full bg-neutral-900 transition-[width] duration-700 ease-smooth"
+                      style={{ width: `${teamProgress}%` }}
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="flex items-baseline gap-3 tabular-nums">
-                <span className="text-5xl font-light tracking-tight md:text-6xl">{teamAvg}</span>
-                <span className="text-lg font-light text-neutral-400">/</span>
-                <span className="text-lg font-light text-neutral-400">{TARGET_HOURS}h</span>
-              </div>
-              <div className="h-px w-full overflow-hidden bg-neutral-200">
-                <div
-                  className="h-full bg-neutral-900 transition-[width] duration-700 ease-smooth"
-                  style={{ width: `${teamProgress}%` }}
-                />
-              </div>
-              <p className="max-w-xl text-xs leading-relaxed text-neutral-400">
-                週15hは目安です。教授向け月次の判定とは別の指標です。
+              <p className="mt-2 text-[0.65rem] leading-snug text-neutral-400">
+                週15hは目安。教授向け月次とは別指標。
+                {SHOW_DEMO_FALLBACK ? " 開発時はデモ表示の場合あり。" : ""}
               </p>
-              {SHOW_DEMO_FALLBACK && (
-                <p className="text-xs text-neutral-400">開発モードではデモデータが表示される場合があります。</p>
-              )}
             </section>
 
             <section>
-              <h2 className="mb-10 text-[0.65rem] font-medium uppercase tracking-[0.22em] text-neutral-400">
-                ユーザー別 · 今週の在室
+              <h2 className="mb-2 text-[0.6rem] font-medium uppercase tracking-[0.2em] text-neutral-400">
+                ユーザー別 · 今週
               </h2>
-              <div className="grid grid-cols-1 gap-px bg-neutral-200/80 md:grid-cols-2">
-                {sortedAnalytics.map((row) => {
-                  const p = Math.min(100, Math.round((row.weekTotalHours / TARGET_HOURS) * 100));
-                  const status = row.weekTotalHours >= 15 ? "達成" : row.weekTotalHours >= 12 ? "注意" : "要改善";
-                  const barTone =
-                    status === "達成"
-                      ? "bg-neutral-900"
-                      : status === "注意"
-                        ? "bg-neutral-600"
-                        : "bg-neutral-400";
-                  return (
-                    <div
-                      key={row.userId}
-                      className="group bg-[#f7f7f5] p-8 transition-colors duration-300 ease-out hover:bg-white"
-                    >
-                      <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                        <div>
-                          <p className="text-base font-medium tracking-tight text-neutral-900">{row.displayName}</p>
-                          <p className="mt-1 text-xs tabular-nums tracking-wider text-neutral-400">{row.userId}</p>
-                        </div>
-                        <div className="text-right tabular-nums">
-                          <span className="text-2xl font-light">{row.weekTotalHours}</span>
-                          <span className="ml-1 text-sm font-light text-neutral-400">h</span>
-                          <p className="mt-1 text-[0.65rem] tracking-wider text-neutral-500">{status}</p>
-                        </div>
-                      </div>
-                      <div className="h-px w-full overflow-hidden bg-neutral-200">
-                        <div
-                          className={`h-full ${barTone} transition-[width] duration-700 ease-smooth`}
-                          style={{ width: `${p}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[20rem] border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-neutral-200 text-[0.55rem] font-medium uppercase tracking-wider text-neutral-400">
+                      <th className="pb-1.5 pr-2 font-medium">ユーザー</th>
+                      <th className="pb-1.5 pr-2 font-normal">ID</th>
+                      <th className="pb-1.5 pr-3 text-right font-normal whitespace-nowrap">時間</th>
+                      <th className="pb-1.5 font-normal sm:w-[36%]">目安</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedAnalytics.map((row) => {
+                      const p = Math.min(100, Math.round((row.weekTotalHours / TARGET_HOURS) * 100));
+                      const status =
+                        row.weekTotalHours >= 15 ? "達成" : row.weekTotalHours >= 12 ? "注意" : "要改善";
+                      const barTone =
+                        status === "達成"
+                          ? "bg-neutral-900"
+                          : status === "注意"
+                            ? "bg-neutral-600"
+                            : "bg-neutral-400";
+                      return (
+                        <tr key={row.userId} className="border-b border-neutral-100 last:border-0">
+                          <td className="max-w-[7rem] truncate py-1 pr-2 font-medium text-neutral-900">
+                            {row.displayName}
+                          </td>
+                          <td className="whitespace-nowrap py-1 pr-2 font-mono text-[0.7rem] text-neutral-500">
+                            {row.userId}
+                          </td>
+                          <td className="py-1 pr-3 text-right tabular-nums">
+                            <span>{row.weekTotalHours}h</span>
+                            <span className="ml-1.5 text-[0.6rem] text-neutral-400">{status}</span>
+                          </td>
+                          <td className="py-1 align-middle">
+                            <div className="h-px overflow-hidden bg-neutral-200">
+                              <div
+                                className={`h-full ${barTone} transition-[width] duration-700 ease-smooth`}
+                                style={{ width: `${p}%` }}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </section>
           </div>
