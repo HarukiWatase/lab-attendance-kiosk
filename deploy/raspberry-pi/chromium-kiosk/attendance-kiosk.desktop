@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Attendance Kiosk
+Comment=研究室勤怠フロント（Chromium キオスク）
+# Raspberry Pi OS: `which chromium` または chromium-browser でパス確認し、必要なら先頭を差し替え
+Exec=/usr/bin/chromium --kiosk --noerrdialogs --disable-infobars --disable-session-crashed-bubble --disable-features=TranslateUI --autoplay-policy=no-user-gesture-required http://127.0.0.1/
+Terminal=false
+X-GNOME-Autostart-enabled=true

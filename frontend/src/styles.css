@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: "DotGothic16", sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+.font-dot {
+  font-family: "DotGothic16", sans-serif;
+}
+
+.mc-bg {
+  background:
+    linear-gradient(#6fa8dc 0 35%, #4d7c0f 35% 45%, #3f2f1f 45% 100%);
+}
+
+.pixel-panel {
+  background: #2f241a;
+  border: 4px solid #1a130d;
+  box-shadow:
+    inset 0 2px 0 #5a4634,
+    inset 0 -2px 0 #1b140f,
+    0 6px 0 #120d09;
+}
+
+.pixel-btn {
+  background: #7e7e7e;
+  border: 3px solid #2f2f2f;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  box-shadow: inset 0 2px 0 #b5b5b5, inset 0 -2px 0 #4f4f4f, 0 3px 0 #1f1f1f;
+}
+
+.pixel-btn:hover {
+  filter: brightness(1.08);
+}
+
+.pixel-btn:active {
+  transform: translateY(2px);
+  box-shadow: inset 0 2px 0 #b5b5b5, inset 0 -2px 0 #4f4f4f, 0 1px 0 #1f1f1f;
+}
+
+.pixel-btn-active {
+  background: #5aa14a;
+  box-shadow: inset 0 2px 0 #98cf8b, inset 0 -2px 0 #3b6f31, 0 3px 0 #203c1a;
+}
+
+.pixel-input {
+  background: #1a1a1a;
+  border: 3px solid #3a3a3a;
+  color: #fff;
+  min-width: 220px;
+}
+
+.pixel-track {
+  background: #151515;
+  border: 2px solid #000;
+}
+
+.pixel-fill-green {
+  background: linear-gradient(180deg, #58d66a, #2d8f3c);
+}
+
+.pixel-fill-yellow {
+  background: linear-gradient(180deg, #f2cf52, #b78c1f);
+}
+
+.pixel-fill-red {
+  background: linear-gradient(180deg, #f06a6a, #a63434);
+}

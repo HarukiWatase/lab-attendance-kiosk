@@ -1,0 +1,19 @@
+[Unit]
+Description=Attendance management FastAPI (uvicorn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=__INSTALL_ROOT__/backend
+Environment=PATH=__INSTALL_ROOT__/.venv/bin
+ExecStart=__INSTALL_ROOT__/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+
+# backend/.env は app が load_dotenv で読み込み（WorkingDirectory 内）
+
+[Install]
+WantedBy=multi-user.target

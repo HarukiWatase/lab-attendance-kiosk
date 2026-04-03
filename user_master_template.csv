@@ -1,0 +1,4 @@
+user_id,display_name,active,grade,team,start_date,end_date,note
+A12345,山田太郎,TRUE,M1,LabA,2026-04-01,,
+B67890,佐藤花子,TRUE,M1,LabA,2026-04-01,,
+C13579,鈴木次郎,TRUE,B4,LabB,2026-04-01,,
