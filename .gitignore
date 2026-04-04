@@ -29,3 +29,6 @@ Thumbs.db
 
 # Cursor / local tooling (optional large paths)
 .mcps/
+
+# Marp 等で出力したスライド PDF（必要なら個別に -f で追加）
+docs/presentations/*.pdf

@@ -36,7 +36,7 @@ type ScanLog = {
 };
 
 const API_BASE = "";
-/** 本番キオスクでは可視入力・ボタンを出さない（frontend-kiosk-spec §2.2 / §3） */
+/** 本番キオスクでは可視入力・ボタンを出さない（docs/specs/frontend-kiosk-spec §2.2 / §3） */
 const IS_DEV = import.meta.env.DEV;
 const CAN_USE_MOCK = IS_DEV;
 const TARGET_HOURS = 15;

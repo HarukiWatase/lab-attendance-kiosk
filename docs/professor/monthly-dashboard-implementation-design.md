@@ -1,6 +1,6 @@
 # 教授向け月次共有ダッシュボード 実装前設計書
 
-本書は `professor-monthly-dashboard-design.md` を実装レベルに落とし込んだ設計書です。  
+本書は [`monthly-dashboard-design.md`](./monthly-dashboard-design.md) を実装レベルに落とし込んだ設計書です。  
 対象は GAS（`gas/attendance.gs`）と Google スプレッドシート構成です。
 
 ---

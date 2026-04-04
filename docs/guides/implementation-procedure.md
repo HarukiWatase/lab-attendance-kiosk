@@ -1,6 +1,6 @@
 # 勤怠管理システム（RPG風UI版） 実装手順書
 
-本書は `guide.md` の最終仕様を実装に落とし込むための手順書です。  
+本書は [`docs/specs/guide.md`](../specs/guide.md) の最終仕様を実装に落とし込むための手順書です。  
 作業順は **frontend -> backend -> gas -> 結合試験 -> Raspberry Pi本番化** を推奨します。
 
 ---
@@ -215,7 +215,7 @@
 
 ## 7. Raspberry Pi 本番化手順
 
-**詳細はリポジトリの `deploy/raspberry-pi/README.md` に従う（nginx・systemd・Chromium の具体例あり）。**
+**詳細はリポジトリの [`deploy/raspberry-pi/README.md`](../../deploy/raspberry-pi/README.md) に従う（nginx・systemd・Chromium の具体例あり）。**
 
 ### 7-1. 配備
 
@@ -227,7 +227,7 @@
 ### 7-2. 常駐化
 
 - nginx で `frontend/dist` を配信し `/api` を uvicorn にリバースプロキシ
-- FastAPI を systemd（`deploy/raspberry-pi/systemd/attendance-backend.service`）で常駐
+- FastAPI を systemd（[`deploy/raspberry-pi/systemd/attendance-backend.service`](../../deploy/raspberry-pi/systemd/attendance-backend.service)）で常駐
 - Chromium キオスクは `~/.config/autostart/` に `.desktop` を配置
 
 ### 7-3. 起動時確認
@@ -251,6 +251,6 @@
 
 ## 9. 変更管理ルール（推奨）
 
-- 仕様変更はまず `guide.md` を更新
+- 仕様変更はまず [`docs/specs/guide.md`](../specs/guide.md) を更新
 - 実装変更時は本手順書も同期更新
 - 受け入れ基準（正常系/異常系/バッチ系）を満たしてから本番反映

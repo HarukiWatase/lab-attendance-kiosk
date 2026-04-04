@@ -1,6 +1,6 @@
 # Raspberry Pi（研究室キオスク）デプロイ手順
 
-フロントは **`vite build`** 済みの静的ファイル、API は **127.0.0.1:8000** の uvicorn、外向きは **nginx** が `/` と `/api` を振り分けます。URL はすべて **同一オリジン**（`frontend-kiosk-spec.md` §5）です。
+フロントは **`vite build`** 済みの静的ファイル、API は **127.0.0.1:8000** の uvicorn、外向きは **nginx** が `/` と `/api` を振り分けます。URL はすべて **同一オリジン**（[`docs/specs/frontend-kiosk-spec.md`](../docs/specs/frontend-kiosk-spec.md) §5）です。
 
 ## 前提
 

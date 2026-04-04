@@ -1,6 +1,6 @@
 # 研究室向け出勤管理システム — 構築概要とレビュー範囲
 
-本書は、チームのエンジニアと研究室側（顧客）が共通認識を持ち、レビューや受入判断を効率化するための資料です。実装の詳細仕様は `operations-phased-guide.md`・`remaining-improvements-and-next-steps.md` 等と併読してください。
+本書は、チームのエンジニアと研究室側（顧客）が共通認識を持ち、レビューや受入判断を効率化するための資料です。実装の詳細仕様は [`docs/operations/phased-guide.md`](../operations/phased-guide.md)・[`docs/operations/remaining-improvements.md`](../operations/remaining-improvements.md) 等と併読してください。
 
 ---
 
@@ -52,7 +52,7 @@
 | フロント | `frontend/src/App.tsx`、`frontend/src/styles.css` | 打刻画面・簡易ログ・分析タブ。開発時はモックデータ利用可。 |
 | API | `backend/app/main.py` | `healthz`、`/api/scan`、閲覧系 `/api/view/*`、開発用 `/api/mock-scan`。 |
 | GAS | `gas/attendance.gs` | `doPost`（打刻行の追記）、`doGet`（ユーザー一覧・学期分析）、未退勤補正・セッション再構築・分析シート整備など。 |
-| 運用・仕様補足 | `operations-phased-guide.md`、`display-ui-spec.md` 等 | フェーズ別の必須設定、UI文言方針など。 |
+| 運用・仕様補足 | [`phased-guide.md`](../operations/phased-guide.md)、[`display-ui-spec.md`](./display-ui-spec.md) 等 | フェーズ別の必須設定、UI文言方針など。 |
 
 ### 2.3 信頼境界と設定
 
@@ -82,8 +82,8 @@
 - **打刻フロー**: 誤操作時のメッセージ、クールダウンによる連打制限の実運用として許容できるか。
 - **マスタ運用**: `user_master` と実際の ID（QR・入力値）の対応、無効化の手順、`user_master_template.csv` の運用。
 - **記録の意味**: `attendance_log` の列の意味、自動補正（`退勤（自動補正）`）を入れる判断と研究室ルールの整合。
-- **分析の見え方**: `display-ui-spec.md` に沿った画面文言・目標時間（例: 週平均 15 時間）の解釈。
-- **フェーズ判断**: `operations-phased-guide.md` のフェーズ1〜3に対し、「まず何を必須にするか」の合意。
+- **分析の見え方**: [`display-ui-spec.md`](./display-ui-spec.md) に沿った画面文言・目標時間（例: 週平均 15 時間）の解釈。
+- **フェーズ判断**: [`phased-guide.md`](../operations/phased-guide.md) のフェーズ1〜3に対し、「まず何を必須にするか」の合意。
 
 **レビュー成果物の例**: 受入チェックリスト、マスタ更新手順の承認、自動補正の採用／非採用。
 
@@ -131,9 +131,9 @@
 
 | 文書 | 用途 |
 |------|------|
-| `operations-phased-guide.md` | フェーズ別の設定手順と最小要件 |
-| `remaining-improvements-and-next-steps.md` | 運用 SOP・改善バックログ |
-| `display-ui-spec.md` | 表示UIの仕様・文言 |
+| [`phased-guide.md`](../operations/phased-guide.md) | フェーズ別の設定手順と最小要件 |
+| [`remaining-improvements.md`](../operations/remaining-improvements.md) | 運用 SOP・改善バックログ |
+| [`display-ui-spec.md`](./display-ui-spec.md) | 表示UIの仕様・文言 |
 
 ---
 

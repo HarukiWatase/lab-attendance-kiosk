@@ -14,10 +14,16 @@
 ## 3. ディレクトリ構成案（モノレポ構成）
 ```text
 /attendance-system
-  ├── frontend/    # Vite + React (UI層)
-  ├── backend/     # FastAPI (デバイス制御・API層)
-  ├── gas/         # Google Apps Script (クラウド・バッチ層)
-  └── deploy/raspberry-pi/  # Pi 本番: nginx・systemd・Chromium キオスク例（README 手順）
+  ├── frontend/           # Vite + React (UI層)
+  ├── backend/            # FastAPI (デバイス制御・API層)
+  ├── gas/                # Google Apps Script (クラウド・バッチ層)
+  ├── deploy/raspberry-pi/  # Pi 本番: nginx・systemd・Chromium 例
+  └── docs/               # 仕様・運用ドキュメント（入口: docs/README.md）
+        ├── specs/        # 要求仕様・UI・キオスク・アーキテクチャ
+        ├── professor/    # 教授ダッシュボード関連
+        ├── operations/   # 運用フェーズ・チェックリスト・改善
+        ├── guides/       # 実装手順
+        └── presentations/  # 説明用スライド（Marp）
 ```
 ## 4. 機能・実装要件
 4-1. フロントエンド (frontend/)

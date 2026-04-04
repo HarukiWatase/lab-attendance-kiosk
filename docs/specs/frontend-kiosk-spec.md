@@ -73,10 +73,10 @@
 ## 5. API・プロキシ
 
 - フロントは相対パス `/api/...` を前提（Vite dev のプロキシ or 本番リバースプロキシでバックエンドへ転送）。
-- **ラズパイ本番の nginx・systemd・Chromium 例:** `deploy/raspberry-pi/README.md`
+- **ラズパイ本番の nginx・systemd・Chromium 例:** [`deploy/raspberry-pi/README.md`](../../deploy/raspberry-pi/README.md)
 - **分析（暦週）**: `GET /api/view/analytics/week-calendar` … 応答 `{ week_start, items: [{ user_id, display_name, week_total_hours }] }`。
 - （任意・レガシー）`GET /api/view/analytics/semester` … スプシ `summary_semester` 由来。フロントの分析タブでは使用しない。
-- ラズパイ本番の具体構成は `deploy/raspberry-pi/` を参照。
+- ラズパイ本番の具体構成は [`deploy/raspberry-pi/`](../../deploy/raspberry-pi/) を参照。
 
 ---
 
@@ -86,11 +86,11 @@
 - [x] 本番: 非表示フォーカス＋スキャナバッファ＋Enter 確定で打刻
 - [x] 開発: 現行どおり入力＋ボタン維持
 - [x] 分析タブ・暦週API再取得（タブ開くたび）・今週のみ表示
-- [x] 本番ビルド手順と環境変数の一文（`deploy/raspberry-pi/README.md`）
+- [x] 本番ビルド手順と環境変数の一文（[`deploy/raspberry-pi/README.md`](../../deploy/raspberry-pi/README.md)）
 
 ---
 
 ## 7. 参照
 
 - `frontend/src/App.tsx`
-- `professor-dashboard-spec-and-manual.md`（教授向け正式レポートはスプシ）
+- [`dashboard-spec-and-manual.md`](../professor/dashboard-spec-and-manual.md)（教授向け正式レポートはスプシ）
