@@ -1,3 +1,4 @@
+import asyncio
 import os
 import re
 import uuid
@@ -16,8 +17,11 @@ load_dotenv()
 
 JST = ZoneInfo("Asia/Tokyo")
 USER_ID_PATTERN = re.compile(r"^[A-Za-z0-9]{5,12}$")
+REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{8,128}$")
 COOLDOWN_SECONDS = int(os.getenv("COOLDOWN_SECONDS", "180"))
 REQUEST_TIMEOUT_SEC = float(os.getenv("REQUEST_TIMEOUT_SEC", "5"))
+GAS_RECONCILE_ATTEMPTS = int(os.getenv("GAS_RECONCILE_ATTEMPTS", "3"))
+GAS_RECONCILE_INTERVAL_SEC = float(os.getenv("GAS_RECONCILE_INTERVAL_SEC", "0.8"))
 USER_CACHE_TTL_SECONDS = int(os.getenv("USER_CACHE_TTL_SECONDS", "60"))
 APP_ENV = os.getenv("APP_ENV", "dev")
 GAS_WEBHOOK_URL = os.getenv("GAS_WEBHOOK_URL")
@@ -50,6 +54,7 @@ class ScanRequest(BaseModel):
     user_id: str
     scanned_at: str | None = None
     source: str | None = "scanner"
+    client_request_id: str | None = None
 
 
 class ScanResponse(BaseModel):
@@ -142,6 +147,15 @@ def validate_user_id(user_id: str) -> None:
         )
 
 
+def normalize_request_id(client_request_id: str | None) -> str:
+    if not client_request_id:
+        return str(uuid.uuid4())
+    candidate = client_request_id.strip()
+    if REQUEST_ID_PATTERN.fullmatch(candidate):
+        return candidate
+    return str(uuid.uuid4())
+
+
 def check_cooldown(user_id: str) -> int | None:
     with cooldown_lock:
         last = cooldown_store.get(user_id)
@@ -160,6 +174,13 @@ def touch_cooldown(user_id: str) -> None:
         cooldown_store[user_id] = now_jst()
 
 
+async def get_gas_request_status(request_id: str) -> dict | None:
+    payload = await call_gas_get("request_status", extra_params={"request_id": request_id})
+    if payload.get("found") is True:
+        return payload
+    return None
+
+
 async def call_gas_webhook(user_id: str, timestamp: str, request_id: str) -> dict:
     payload = {
         "user_id": user_id,
@@ -173,6 +194,18 @@ async def call_gas_webhook(user_id: str, timestamp: str, request_id: str) -> dic
         try:
             response = await client.post(GAS_WEBHOOK_URL, json=payload, headers=headers)
         except httpx.TimeoutException as exc:
+            # GAS が遅延しても実処理が完了している可能性があるため、request_id で結果照会を試みる。
+            for attempt in range(max(GAS_RECONCILE_ATTEMPTS, 0)):
+                recovered = await get_gas_request_status(request_id)
+                if recovered:
+                    return {
+                        "ok": True,
+                        "action": recovered.get("action"),
+                        "message": recovered.get("message") or "recovered from timeout",
+                        "server_time": recovered.get("server_time"),
+                    }
+                if attempt < GAS_RECONCILE_ATTEMPTS - 1:
+                    await asyncio.sleep(max(GAS_RECONCILE_INTERVAL_SEC, 0))
             raise HTTPException(
                 status_code=504,
                 detail={"error_code": "GAS_TIMEOUT", "message": "GASタイムアウト"},
@@ -211,9 +244,11 @@ async def call_gas_webhook(user_id: str, timestamp: str, request_id: str) -> dic
     return payload
 
 
-async def call_gas_get(mode: str) -> dict:
+async def call_gas_get(mode: str, extra_params: dict | None = None) -> dict:
     timeout = httpx.Timeout(REQUEST_TIMEOUT_SEC)
     params = {"mode": mode, "shared_secret": GAS_SHARED_SECRET}
+    if extra_params:
+        params.update(extra_params)
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
         try:
             response = await client.get(GAS_WEBHOOK_URL, params=params)
@@ -321,7 +356,7 @@ def healthz() -> dict:
 
 @app.post("/api/scan", response_model=ScanResponse)
 async def scan(payload: ScanRequest) -> ScanResponse:
-    request_id = str(uuid.uuid4())
+    request_id = normalize_request_id(payload.client_request_id)
     validate_user_id(payload.user_id)
     if not should_use_local_mock():
         user = await get_user_by_id(payload.user_id)

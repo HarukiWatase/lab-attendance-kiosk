@@ -21,6 +21,24 @@ function doGet(e) {
     if (mode === "users") {
       return jsonResponse({ ok: true, items: getUserDirectoryItems() });
     }
+    if (mode === "request_status") {
+      const requestId = (e && e.parameter && e.parameter.request_id) || "";
+      if (!requestId) {
+        return jsonResponse({ ok: false, error_code: "BAD_REQUEST", message: "request_id is required" });
+      }
+      const found = getRequestStatusByRequestId(getSheet(), requestId);
+      if (!found) {
+        return jsonResponse({ ok: true, found: false, request_id: requestId });
+      }
+      return jsonResponse({
+        ok: true,
+        found: true,
+        request_id: requestId,
+        action: found.action,
+        timestamp: found.timestamp,
+        message: "request found"
+      });
+    }
     return jsonResponse({ ok: false, error_code: "BAD_REQUEST", message: "unsupported mode" });
   } catch (err) {
     return jsonResponse({ ok: false, error_code: "INTERNAL_ERROR", message: String(err) });
@@ -423,6 +441,25 @@ function getActionByRequestId(sheet, requestId) {
     if (reqId === requestId) return action;
   }
   return "";
+}
+
+function getRequestStatusByRequestId(sheet, requestId) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return null;
+  // A:timestamp, C:action, E:request_id
+  const values = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+  for (let i = values.length - 1; i >= 0; i--) {
+    const timestamp = values[i][0];
+    const action = String(values[i][2] || "");
+    const reqId = String(values[i][4] || "");
+    if (reqId === requestId) {
+      return {
+        action: action,
+        timestamp: timestamp instanceof Date ? timestamp.toISOString() : String(timestamp || "")
+      };
+    }
+  }
+  return null;
 }
 
 function getYesterdayYmd() {
