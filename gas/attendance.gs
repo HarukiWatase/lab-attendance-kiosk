@@ -96,6 +96,41 @@ function getCurrentCalendarWeekStartYmd() {
   return getWeekStartYmd(new Date());
 }
 
+/**
+ * session_log の week_start が日付型のとき、getValues() の Date と API の weekKey（JST 暦週の月曜 yyyy-MM-dd）
+ * を文字列比較で突き合わせると一致しないことがある（シート TZ・UTC 解釈の差）。
+ * スプレッドシート TZ / 固定 JST / UTC 暦日（toISOString）のいずれかが weekKey と一致すればその週として扱う。
+ */
+function sessionLogWeekStartMatchesWeekKey_(v, weekKey) {
+  if (v === null || v === undefined || v === "") return false;
+  if (v instanceof Date) {
+    if (isNaN(v.getTime())) return false;
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ssTz = ss ? ss.getSpreadsheetTimeZone() : TZ;
+    const asSs = Utilities.formatDate(v, ssTz, "yyyy-MM-dd");
+    const asJst = Utilities.formatDate(v, TZ, "yyyy-MM-dd");
+    const asUtcDay = v.toISOString().slice(0, 10);
+    return weekKey === asSs || weekKey === asJst || weekKey === asUtcDay;
+  }
+  const s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s === weekKey;
+  return s === weekKey;
+}
+
+/** duration_hours 列が文字列・カンマ小数のとき Number() が NaN になり週次合計が壊れるのを防ぐ */
+function parseSessionDurationHours_(v) {
+  if (typeof v === "number") {
+    return isFinite(v) ? v : 0;
+  }
+  if (v === null || v === undefined || v === "") return 0;
+  const s = String(v)
+    .trim()
+    .replace(/\s/g, "")
+    .replace(",", ".");
+  const n = parseFloat(s);
+  return isFinite(n) ? n : 0;
+}
+
 /** 暦週（月曜始まり・JST の week_start 文字列）に一致するセッションのみ集計。自動補正除外。user_master の active のみ。 */
 function getWeeklyCalendarAnalyticsItems(weekKey) {
   const sessionSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("session_log");
@@ -105,11 +140,12 @@ function getWeeklyCalendarAnalyticsItems(weekKey) {
     for (let i = 1; i < values.length; i++) {
       const row = values[i];
       const uid = String(row[0] || "").trim();
-      const dur = Number(row[3] || 0);
+      const dur = parseSessionDurationHours_(row[3]);
       const autoFixed = row[4] === true || String(row[4]).toUpperCase() === "TRUE";
-      const ws = String(row[5] || "").trim();
-      if (!uid || autoFixed || ws !== weekKey) continue;
-      hoursByUser[uid] = (hoursByUser[uid] || 0) + dur;
+      if (!uid || autoFixed || !sessionLogWeekStartMatchesWeekKey_(row[5], weekKey)) continue;
+      const prev = hoursByUser[uid] || 0;
+      const add = dur;
+      hoursByUser[uid] = (isFinite(prev) ? prev : 0) + (isFinite(add) ? add : 0);
     }
   }
 
@@ -117,7 +153,8 @@ function getWeeklyCalendarAnalyticsItems(weekKey) {
   const items = [];
   master.forEach((u) => {
     if (!u.active) return;
-    const h = hoursByUser[u.user_id] || 0;
+    let h = hoursByUser[u.user_id] || 0;
+    if (!isFinite(h)) h = 0;
     items.push({
       user_id: u.user_id,
       display_name: u.display_name,

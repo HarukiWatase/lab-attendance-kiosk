@@ -36,6 +36,16 @@ type ScanLog = {
 };
 
 const API_BASE = "";
+
+function parseWeekTotalHours(v: unknown): number {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const n = parseFloat(v.trim().replace(",", "."));
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
+
 /** 本番キオスクでは可視入力・ボタンを出さない（docs/specs/frontend-kiosk-spec §2.2 / §3） */
 const IS_DEV = import.meta.env.DEV;
 const CAN_USE_MOCK = IS_DEV;
@@ -217,15 +227,20 @@ export default function App() {
         } else {
           const body = (await res.json()) as {
             week_start: string;
-            items: Array<{ user_id: string; display_name: string; week_total_hours: number }>;
+            items: Array<Record<string, unknown>>;
           };
           setWeekStartLabel(body.week_start || "");
           setAnalyticsRows(
-            (body.items || []).map((r) => ({
-              userId: r.user_id,
-              displayName: r.display_name,
-              weekTotalHours: Number(r.week_total_hours || 0)
-            }))
+            (body.items || []).map((r) => {
+              const userId = String(r.user_id ?? r.userId ?? "").trim();
+              const displayName = String(r.display_name ?? r.displayName ?? userId).trim() || userId;
+              const rawHours = r.week_total_hours ?? r.weekTotalHours;
+              return {
+                userId,
+                displayName,
+                weekTotalHours: parseWeekTotalHours(rawHours)
+              };
+            })
           );
         }
       } catch {

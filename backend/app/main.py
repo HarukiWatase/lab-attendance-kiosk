@@ -85,6 +85,23 @@ class WeekCalendarResponse(BaseModel):
     items: list[WeekCalendarRow]
 
 
+def _week_calendar_row_from_gas_item(item: object) -> WeekCalendarRow:
+    """GAS のキー揺れ・文字列数値・NaN を吸収する（週次時間がフロントに載らない事故の予防）。"""
+    if not isinstance(item, dict):
+        return WeekCalendarRow(user_id="", display_name="", week_total_hours=0.0)
+    d = item
+    uid = str(d.get("user_id") or d.get("userId") or "").strip()
+    name = str(d.get("display_name") or d.get("displayName") or uid).strip() or uid
+    raw = d.get("week_total_hours", d.get("weekTotalHours", 0))
+    try:
+        hrs = float(raw)
+    except (TypeError, ValueError):
+        hrs = 0.0
+    if hrs != hrs:  # NaN
+        hrs = 0.0
+    return WeekCalendarRow(user_id=uid, display_name=name, week_total_hours=hrs)
+
+
 class UserRow(BaseModel):
     user_id: str
     display_name: str
@@ -448,9 +465,11 @@ async def analytics_week_calendar() -> WeekCalendarResponse:
         )
     payload = await call_gas_get("analytics_week_calendar")
     items = payload.get("items", [])
+    rows = [_week_calendar_row_from_gas_item(x) for x in items]
+    rows = [r for r in rows if r.user_id]
     return WeekCalendarResponse(
         week_start=str(payload.get("week_start") or ""),
-        items=[WeekCalendarRow(**item) for item in items],
+        items=rows,
     )
 
 
