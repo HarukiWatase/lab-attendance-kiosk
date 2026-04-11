@@ -1,7 +1,7 @@
 # 教授向け月次共有ダッシュボード 実装前設計書
 
 本書は [`monthly-dashboard-design.md`](./monthly-dashboard-design.md) を実装レベルに落とし込んだ設計書です。  
-対象は GAS（`gas/attendance.gs`）と Google スプレッドシート構成です。
+対象は GAS（`gas/src/main.ts`）と Google スプレッドシート構成です。
 
 ---
 
@@ -167,7 +167,7 @@
 
 ## 7.1 改修対象
 
-- `gas/attendance.gs` に教授向け関数群を追加済み（`bootstrapProfessorDashboard` 等）。`setupAnalyticsSheets()` は既存の `summary_semester` / `dashboard` 用として維持し、教授向けは別関数で実行する。
+- `gas/src/main.ts` に教授向け関数群を追加済み（`bootstrapProfessorDashboard` 等）。`setupAnalyticsSheets()` は `summary_semester` 用として維持し、教授向けは別関数で実行する。
 - 既存 `rebuildSessionLog()` は継続利用。教授向け計算では `is_auto_fixed` 除外を厳守。
 
 ## 7.2 実装方針
@@ -226,7 +226,7 @@
 
 ## 12. GAS 関数 API 仕様（入出力・エラー）
 
-実装は `gas/attendance.gs` を参照。以下は契約（Contract）の要約である。
+実装は `gas/src/main.ts` を参照。以下は契約（Contract）の要約である。
 
 ### 12.1 定数（シート名）
 

@@ -131,6 +131,50 @@ function parseSessionDurationHours_(v) {
   return isFinite(n) ? n : 0;
 }
 
+/**
+ * attendance_log（A:timestamp, B:user_id, C:action）を末尾から走査し、
+ * activeUserIds に含まれる各 user_id の「シート上最後の行」の action を求める。
+ * 全員分の最終 action が揃ったら打ち切る。最終が「出勤」なら在室。
+ * @param {string[]} activeUserIds
+ * @returns {Object<string, boolean>} user_id -> is_present
+ */
+function getIsPresentByUserIdFromAttendanceLog_(activeUserIds) {
+  const need = {};
+  for (let i = 0; i < activeUserIds.length; i++) {
+    const id = String(activeUserIds[i] || "").trim();
+    if (id) need[id] = true;
+  }
+  const needCount = Object.keys(need).length;
+  if (needCount === 0) return {};
+
+  const sheet = getSheet();
+  const lastRow = sheet && sheet.getLastRow();
+  if (!sheet || lastRow < 2) {
+    const empty = {};
+    Object.keys(need).forEach((k) => {
+      empty[k] = false;
+    });
+    return empty;
+  }
+
+  const values = sheet.getRange(2, 1, lastRow, 3).getValues();
+  const lastAction = {};
+  let filled = 0;
+  for (let r = values.length - 1; r >= 0; r--) {
+    if (filled >= needCount) break;
+    const uid = String(values[r][1] || "").trim();
+    if (!uid || !need[uid] || Object.prototype.hasOwnProperty.call(lastAction, uid)) continue;
+    lastAction[uid] = String(values[r][2] || "").trim();
+    filled++;
+  }
+
+  const out = {};
+  Object.keys(need).forEach((uid) => {
+    out[uid] = lastAction[uid] === "出勤";
+  });
+  return out;
+}
+
 /** 暦週（月曜始まり・JST の week_start 文字列）に一致するセッションのみ集計。自動補正除外。user_master の active のみ。 */
 function getWeeklyCalendarAnalyticsItems(weekKey) {
   const sessionSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("session_log");
@@ -150,6 +194,12 @@ function getWeeklyCalendarAnalyticsItems(weekKey) {
   }
 
   const master = getUserDirectoryItems();
+  const activeIds = [];
+  master.forEach((u) => {
+    if (u.active) activeIds.push(u.user_id);
+  });
+  const isPresentByUser = getIsPresentByUserIdFromAttendanceLog_(activeIds);
+
   const items = [];
   master.forEach((u) => {
     if (!u.active) return;
@@ -158,7 +208,8 @@ function getWeeklyCalendarAnalyticsItems(weekKey) {
     items.push({
       user_id: u.user_id,
       display_name: u.display_name,
-      week_total_hours: Math.round(h * 100) / 100
+      week_total_hours: Math.round(h * 100) / 100,
+      is_present: isPresentByUser[u.user_id] === true
     });
   });
   items.sort((a, b) => b.week_total_hours - a.week_total_hours);
@@ -208,39 +259,48 @@ function getUserDirectoryItems() {
 }
 
 function runAutoFixBatch() {
-  const autoFixHours = Number(PropertiesService.getScriptProperties().getProperty("AUTO_FIX_HOURS") || "0");
-  const sheet = getSheet();
-  const values = sheet.getDataRange().getValues();
-  if (values.length <= 1) return;
+  try {
+    const autoFixHours = Number(PropertiesService.getScriptProperties().getProperty("AUTO_FIX_HOURS") || "0");
+    const sheet = getSheet();
+    const values = sheet.getDataRange().getValues();
+    if (values.length <= 1) {
+      appendAutomationLogRow_("runAutoFixBatch", "OK", "skipped: no data rows");
+      return;
+    }
 
-  const targetDay = getYesterdayYmd();
-  const lastInByUser = {};
-  const lastOutByUser = {};
-  const existingRequestIds = {};
-  for (let i = 1; i < values.length; i++) {
-    const row = values[i];
-    const ts = row[0];
-    const userId = row[1];
-    const action = row[2];
-    const reqId = String(row[4] || "");
-    if (reqId) existingRequestIds[reqId] = true;
-    if (!userId || !action || !ts) continue;
+    const targetDay = getYesterdayYmd();
+    const lastInByUser = {};
+    const lastOutByUser = {};
+    const existingRequestIds = {};
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+      const ts = row[0];
+      const userId = row[1];
+      const action = row[2];
+      const reqId = String(row[4] || "");
+      if (reqId) existingRequestIds[reqId] = true;
+      if (!userId || !action || !ts) continue;
 
-    const ymd = Utilities.formatDate(new Date(ts), TZ, "yyyy-MM-dd");
-    if (ymd !== targetDay) continue;
-    if (action === "出勤") lastInByUser[userId] = new Date(ts);
-    if (action === "退勤" || action === "退勤（自動補正）") lastOutByUser[userId] = new Date(ts);
+      const ymd = Utilities.formatDate(new Date(ts), TZ, "yyyy-MM-dd");
+      if (ymd !== targetDay) continue;
+      if (action === "出勤") lastInByUser[userId] = new Date(ts);
+      if (action === "退勤" || action === "退勤（自動補正）") lastOutByUser[userId] = new Date(ts);
+    }
+
+    Object.keys(lastInByUser).forEach((userId) => {
+      if (lastOutByUser[userId]) return;
+      const inTime = lastInByUser[userId];
+      const outTime = new Date(inTime.getTime() + autoFixHours * 60 * 60 * 1000);
+      const reqId = `autofix-${targetDay}-${userId}`;
+      if (existingRequestIds[reqId]) return;
+      sheet.appendRow([outTime.toISOString(), userId, "退勤（自動補正）", "auto_fix", reqId, "前日未退勤の自動補正"]);
+      existingRequestIds[reqId] = true;
+    });
+    appendAutomationLogRow_("runAutoFixBatch", "OK", "completed for " + targetDay);
+  } catch (err) {
+    appendAutomationLogRow_("runAutoFixBatch", "ERROR", String(err));
+    throw err;
   }
-
-  Object.keys(lastInByUser).forEach((userId) => {
-    if (lastOutByUser[userId]) return;
-    const inTime = lastInByUser[userId];
-    const outTime = new Date(inTime.getTime() + autoFixHours * 60 * 60 * 1000);
-    const reqId = `autofix-${targetDay}-${userId}`;
-    if (existingRequestIds[reqId]) return;
-    sheet.appendRow([outTime.toISOString(), userId, "退勤（自動補正）", "auto_fix", reqId, "前日未退勤の自動補正"]);
-    existingRequestIds[reqId] = true;
-  });
 }
 
 function rebuildSessionLog() {
@@ -333,13 +393,6 @@ function setupAnalyticsSheets() {
     '=ARRAYFORMULA(IF(A2:A="",,IF(E2:E>=15,"達成",IF(E2:E>=12,"注意","要改善"))))'
   );
   summary.getRange("J2").setFormula('=ARRAYFORMULA(IF(A2:A="",,15))');
-
-  const dashboard = getOrCreateSheet("dashboard", []);
-  dashboard.clear();
-  dashboard.getRange("A1").setValue("前期 週平均在室時間（目標15h）");
-  dashboard.getRange("A2").setValue("グラフは [挿入] -> [グラフ] で作成");
-  dashboard.getRange("A3").setValue("推奨データ範囲: summary_semester!B1:B, E1:E, J1:J");
-  dashboard.getRange("A4").setValue("status列(I)に条件付き書式: 達成=緑, 注意=黄, 要改善=赤");
 }
 
 function installDailyBatchTrigger() {
@@ -354,20 +407,26 @@ function installDailyBatchTrigger() {
  * - runMonthlyClose() を実行（snapshot あり）
  */
 function runMonthlyCloseForPreviousMonth() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const cfg = ss.getSheetByName(CONFIG_SHEET_NAME);
-  if (!cfg) {
-    throw new Error("00_config が見つかりません。先に bootstrapProfessorDashboard() を実行してください。");
-  }
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const cfg = ss.getSheetByName(CONFIG_SHEET_NAME);
+    if (!cfg) {
+      throw new Error("00_config が見つかりません。先に bootstrapProfessorDashboard() を実行してください。");
+    }
 
-  const now = new Date();
-  const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0); // 当月1日基準で前月末
-  cfg.getRange("B12").setValue(prevMonthEnd);
-  cfg.getRange("B12").setNumberFormat("yyyy-mm-dd");
+    const now = new Date();
+    const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0); // 当月1日基準で前月末
+    cfg.getRange("B12").setValue(prevMonthEnd);
+    cfg.getRange("B12").setNumberFormat("yyyy-mm-dd");
 
-  const result = runMonthlyClose();
-  if (!result || result.ok !== true) {
-    throw new Error("runMonthlyClose failed: " + JSON.stringify(result));
+    const result = runMonthlyClose({});
+    if (!result || result.ok !== true) {
+      throw new Error("runMonthlyClose failed: " + JSON.stringify(result));
+    }
+    appendAutomationLogRow_("runMonthlyCloseForPreviousMonth", "OK", "monthly close completed");
+  } catch (err) {
+    appendAutomationLogRow_("runMonthlyCloseForPreviousMonth", "ERROR", String(err));
+    throw err;
   }
 }
 
@@ -414,6 +473,25 @@ function removeAutomationTriggers() {
       ScriptApp.deleteTrigger(t);
     }
   });
+}
+
+/**
+ * 時間トリガー実行の記録（失敗検知用）。ログ失敗は本処理に影響しない。
+ */
+function appendAutomationLogRow_(functionName, status, detail) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) return;
+    let sh = ss.getSheetByName(AUTOMATION_LOG_SHEET_NAME);
+    if (!sh) {
+      sh = ss.insertSheet(AUTOMATION_LOG_SHEET_NAME);
+      sh.appendRow(["timestamp_iso", "function_name", "status", "detail"]);
+    }
+    const msg = detail == null ? "" : String(detail);
+    sh.appendRow([new Date().toISOString(), functionName, status, msg.slice(0, 49900)]);
+  } catch (_err) {
+    // no-op
+  }
 }
 
 function setScriptProperties() {
@@ -531,6 +609,7 @@ function jsonResponse(obj) {
 var CONFIG_SHEET_NAME = "00_config";
 var PROFESSOR_SHEET_NAME = "10_professor_monthly";
 var MONTHLY_HISTORY_SHEET = "12_monthly_history";
+var AUTOMATION_LOG_SHEET_NAME = "99_automation_log";
 
 /**
  * 初回セットアップ。シート作成・config 雛形・教授シート枠・棒グラフ枠（冪等）。

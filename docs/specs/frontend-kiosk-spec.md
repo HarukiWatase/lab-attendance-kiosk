@@ -39,7 +39,7 @@
 - **表示する**。
 - **データ取得**
   - `GET /api/view/users` … アプリ起動時に1回（打刻時の表示名用）。
-  - `GET /api/view/analytics/week-calendar` … **分析タブを開いたときに毎回再取得**。
+  - `GET /api/view/analytics/week-calendar` … **分析タブを開いたときに毎回再取得**（そのリクエストで**最新の在室判定**も返す。在室の定義は [analytics-tab-presence-indicator.md](./analytics-tab-presence-indicator.md)）。
 - **指標**: **JST・月曜始まりの暦週**（`session_log.week_start` と一致）における **在室合計時間（h）**。`is_auto_fixed=TRUE` のセッションは含めない（GAS側で除外）。
 - **週の切替**: 新しい暦週が始まると API の `week_start` が変わるため、**先週の棒は表示されず「今週だけ」**になる。
 - **進捗バー**: 週合計を **15h** を100%とみなした目安（学期判定の15h週平均とは別。画面に注記）。
@@ -74,7 +74,7 @@
 
 - フロントは相対パス `/api/...` を前提（Vite dev のプロキシ or 本番リバースプロキシでバックエンドへ転送）。
 - **ラズパイ本番の nginx・systemd・Chromium 例:** [`deploy/raspberry-pi/README.md`](../../deploy/raspberry-pi/README.md)
-- **分析（暦週）**: `GET /api/view/analytics/week-calendar` … 応答 `{ week_start, items: [{ user_id, display_name, week_total_hours }] }`。
+- **分析（暦週）**: `GET /api/view/analytics/week-calendar` … 応答 `{ week_start, items: [{ user_id, display_name, week_total_hours, is_present }] }`（`is_present` は打刻ログ由来の在室フラグ。仕様は [analytics-tab-presence-indicator.md](./analytics-tab-presence-indicator.md)）。
 - （任意・レガシー）`GET /api/view/analytics/semester` … スプシ `summary_semester` 由来。フロントの分析タブでは使用しない。
 - ラズパイ本番の具体構成は [`deploy/raspberry-pi/`](../../deploy/raspberry-pi/) を参照。
 
@@ -87,10 +87,12 @@
 - [x] 開発: 現行どおり入力＋ボタン維持
 - [x] 分析タブ・暦週API再取得（タブ開くたび）・今週のみ表示
 - [x] 本番ビルド手順と環境変数の一文（[`deploy/raspberry-pi/README.md`](../../deploy/raspberry-pi/README.md)）
+- [x] 分析タブ: `week-calendar` の `is_present` と在室マーク表示（[`analytics-tab-presence-indicator.md`](./analytics-tab-presence-indicator.md)）
 
 ---
 
 ## 7. 参照
 
 - `frontend/src/App.tsx`
+- [`analytics-tab-presence-indicator.md`](./analytics-tab-presence-indicator.md)（分析タブの在室マーク・API 拡張）
 - [`dashboard-spec-and-manual.md`](../professor/dashboard-spec-and-manual.md)（教授向け正式レポートはスプシ）

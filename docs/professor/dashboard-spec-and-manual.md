@@ -1,7 +1,7 @@
 # 教授向けダッシュボード 仕様まとめ・運用マニュアル
 
 本書は、フロント改修前に現行仕様を固定し、運用担当が迷わず回せるようにするための資料です。  
-対象は Google Apps Script（`gas/attendance.gs`）とスプレッドシート運用です。
+対象は Google Apps Script（`gas/src/main.ts`）とスプレッドシート運用です。
 
 ---
 
@@ -124,6 +124,11 @@
   - `B12` を先月末へ自動設定
   - 月次締め処理を実行
 
+### 7.3 実行ログ（任意だが推奨）
+
+- シート **`99_automation_log`** に、`runAutoFixBatch` と `runMonthlyCloseForPreviousMonth` の**成功／失敗**が1行ずつ追記される（初回実行時に自動作成）。
+- トリガーが静かに失敗していないか確認する用途。
+
 ---
 
 ## 8. トラブルシュート
@@ -159,4 +164,13 @@
 - フロント分析を教授向け定義（達成率・経過週平均）に合わせる
 - API で `10_professor_monthly` 相当の指標を直接返す設計を検討
 - 教授向け表示とフロント表示の用語・定義を統一
+
+---
+
+## 11. 関連ドキュメント（運用）
+
+- [前期・後期切替 Runbook](../operations/semester-transition-runbook.md)
+- [summary_semester と教授指標の関係](../operations/summary-semester-vs-professor-metrics.md)
+- [GAS トリガーと clasp](../operations/gas-triggers-and-clasp.md)
+- [スプレッドシートの寿命・保護・索引](../operations/spreadsheet-lifecycle-protection.md)
 

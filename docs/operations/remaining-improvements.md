@@ -10,7 +10,7 @@
 - GAS連携とスプレッドシート記録
 - `session_log` 自動生成（`rebuildSessionLog()`）
 - `summary_semester` 自動整備（`setupAnalyticsSheets()`）
-- 週平均15時間の可視化グラフ
+- `summary_semester` による達成状況の確認
 - `user_master` による `user_id` と氏名の紐づけ
 
 ---
@@ -31,7 +31,7 @@
 1. **`summary_weekly` 追加**
    - 週ごとの推移を正規テーブル化
 2. **自動補正の影響可視化**
-   - `auto_fix_ratio` をダッシュボードに常設
+   - `auto_fix_ratio` を `summary_semester` または教授向けシート側で常設
 3. **対象期間の厳密化**
    - 前期開始日・終了日を固定し、集計条件を明記
 
@@ -61,7 +61,7 @@
 - [ ] 毎週の固定手順を文書化
   - `rebuildSessionLog()`
   - `setupAnalyticsSheets()`
-  - ダッシュボード確認
+  - `summary_semester` / 教授向けシートの確認
 
 ## Step 2: 監査チェックを運用に組み込む（今週）
 
@@ -88,8 +88,7 @@
 
 - [ ] Apps Script `rebuildSessionLog()` 実行
 - [ ] Apps Script `setupAnalyticsSheets()` 実行
-- [ ] `summary_semester` 更新確認
-- [ ] グラフ表示確認（崩れ・欠損がないか）
+- [ ] `summary_semester` 更新確認（数式・条件付き書式に崩れがないか）
 - [ ] 達成/注意/要改善の人数確認
 - [ ] `auto_fix_ratio` 確認
 - [ ] 未登録 `user_id` 確認

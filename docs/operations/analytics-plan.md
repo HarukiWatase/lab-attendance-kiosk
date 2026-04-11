@@ -94,16 +94,13 @@
 - 集計テーブル:
   - `summary_weekly`（週次）
   - `summary_semester`（前期累積・週平均）
-- 表示シート:
-  - `dashboard`
 
 ### 推奨シート構成
 
 1. `attendance_log`（入力）
 2. `session_log`（整形）
 3. `summary_weekly`（週次KPI）
-4. `summary_semester`（目標差分）
-5. `dashboard`（グラフ）
+4. `summary_semester`（目標差分・達成状況の確認。必要ならこのシート上でグラフを追加）
 
 ---
 
@@ -135,7 +132,7 @@
 
 1. 打刻データ蓄積（通常運用）
 2. 週末に `summary_weekly` 更新
-3. `dashboard` で未達者と傾向を確認
+3. `summary_semester` で未達者と傾向を確認
 4. 必要なら翌週の行動改善（出勤頻度・時間帯）
 
 ---
@@ -157,7 +154,7 @@
 ## 9. 段階的実装ロードマップ
 
 ### Phase 1（すぐできる）
-- スプレッドシートで `session_log` / `summary_weekly` / `dashboard` を作成
+- スプレッドシートで `session_log` / `summary_weekly` を作成（`summary_semester` は GAS の `setupAnalyticsSheets()` で整備）
 - 週平均15時間達成可視化（棒グラフ + 目標線）
 
 ### Phase 2（次段階）

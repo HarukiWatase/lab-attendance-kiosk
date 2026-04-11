@@ -10,9 +10,9 @@
 - 既定表示は **打刻タブ固定**
 - 状態メッセージのフォントサイズは **推奨サイズ**を採用
 - 直近ログは **3件のみ表示**
-- 分析タブは以下の2要素に限定
+- 分析タブは以下に限定
   - チーム週平均
-  - ユーザー別進捗バー
+  - ユーザー別進捗一覧（週次時間・目安バー。在室判定時のみ氏名の右に在室マーク。詳細は [analytics-tab-presence-indicator.md](./analytics-tab-presence-indicator.md)）
 - ユーザー数は **14名程度** を想定
 - 通常運用の入力デバイスは **QRスキャナーのみ**
 - スキャンボタン押下は通常不要（自動送信）
@@ -49,11 +49,12 @@
    - 進捗バー（0〜100%）
 2. ユーザー別進捗一覧（14名想定）
    - 1行ごとに:
-     - 氏名（または user_id）
+     - 氏名（または user_id）。**在室と判定されたユーザのみ**、氏名の**右隣**に在室マーク（記号または短いテキスト。色だけに依存しない）
      - `xx.xh`
-     - ステータス（達成/注意/要改善）
+     - ステータス（達成/未達成。週合計が目標 **15h 以上** で達成）
      - 水平バー
    - 縦スクロール対応（14名が1画面に収まらない場合を許容）
+   - 在室の定義・API 契約は [analytics-tab-presence-indicator.md](./analytics-tab-presence-indicator.md) に従う
 
 ---
 
@@ -82,9 +83,8 @@
 - `error`: 赤系
 
 進捗バー（分析タブ）:
-- 達成（`>=15h`）: 緑
-- 注意（`12〜15h`）: 黄
-- 要改善（`<12h`）: 赤
+- 達成（週合計 `>=15h`）: 濃い neutral（`neutral-900` 相当）
+- 未達成（`<15h`）: 薄い neutral（`neutral-400` 相当）
 
 ---
 
@@ -121,21 +121,7 @@
 ## 7. データ連携仕様（現段階）
 
 - 打刻タブ: 既存API（`/api/scan`, `/api/mock-scan`）
-- 分析タブ:
-  - 初期はダミーデータでも可
-  - 次段階で `summary_semester` 相当APIに接続
-
-想定レスポンス（将来）:
-
-```json
-[
-  {
-    "user_id": "A12345",
-    "display_name": "山田 太郎",
-    "weekly_avg_hours": 14.2
-  }
-]
-```
+- 分析タブ: 暦週の **`GET /api/view/analytics/week-calendar`**（応答に `is_present` を含む。詳細は [frontend-kiosk-spec.md](./frontend-kiosk-spec.md) および [analytics-tab-presence-indicator.md](./analytics-tab-presence-indicator.md)）
 
 ---
 
@@ -148,6 +134,7 @@
   - チーム週平均カード
   - ユーザー別進捗バー（14名）
   が表示される
+- 在室マークは [analytics-tab-presence-indicator.md](./analytics-tab-presence-indicator.md) の受け入れ基準を満たす
 - 14名表示時にレイアウトが崩れない（スクロールで閲覧可能）
 - スキャナー入力（Enter）だけで打刻できる
 - 分析タブから60秒後に打刻タブへ戻る

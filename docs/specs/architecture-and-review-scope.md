@@ -33,7 +33,7 @@
           ▼
 ┌───────────────────┐
 │ GAS Web アプリ     │  doPost / doGet — シート読書き・補正バッチ等
-│ gas/attendance.gs │  （実体はスプレッドシートに紐づくプロジェクト）
+│ gas/src/main.ts │  （実体はスプレッドシートに紐づくプロジェクト）
 └─────────┬─────────┘
           ▼
 ┌───────────────────┐
@@ -51,7 +51,7 @@
 |------|---------------------------|------------|
 | フロント | `frontend/src/App.tsx`、`frontend/src/styles.css` | 打刻画面・簡易ログ・分析タブ。開発時はモックデータ利用可。 |
 | API | `backend/app/main.py` | `healthz`、`/api/scan`、閲覧系 `/api/view/*`、開発用 `/api/mock-scan`。 |
-| GAS | `gas/attendance.gs` | `doPost`（打刻行の追記）、`doGet`（ユーザー一覧・学期分析）、未退勤補正・セッション再構築・分析シート整備など。 |
+| GAS | `gas/src/main.ts` | `doPost`（打刻行の追記）、`doGet`（ユーザー一覧・学期分析）、未退勤補正・セッション再構築・分析シート整備など。 |
 | 運用・仕様補足 | [`phased-guide.md`](../operations/phased-guide.md)、[`display-ui-spec.md`](./display-ui-spec.md) 等 | フェーズ別の必須設定、UI文言方針など。 |
 
 ### 2.3 信頼境界と設定
@@ -67,7 +67,7 @@
 | `attendance_log` | 生ログ（真実のソースに近い）。タイムスタンプ・ユーザー・出勤／退勤・来源・`request_id` 等。 |
 | `user_master` | 登録ユーザーと表示名・アクティブフラグ。バックエンドの照合元。 |
 | `session_log` | ログから再構築した「セッション」単位（集計の前提）。 |
-| `summary_semester` / `dashboard` 等 | 学期・週平均など分析用。GAS の整備関数・数式と連動。 |
+| `summary_semester` 等 | 補助用の数式集計（**全期間寄り**になり得る）。**学期の公式指標は教授シート**（`00_config` 連動）。詳細は [summary-semester-vs-professor-metrics.md](../operations/summary-semester-vs-professor-metrics.md)。 |
 
 ---
 
@@ -82,7 +82,7 @@
 - **打刻フロー**: 誤操作時のメッセージ、クールダウンによる連打制限の実運用として許容できるか。
 - **マスタ運用**: `user_master` と実際の ID（QR・入力値）の対応、無効化の手順、`user_master_template.csv` の運用。
 - **記録の意味**: `attendance_log` の列の意味、自動補正（`退勤（自動補正）`）を入れる判断と研究室ルールの整合。
-- **分析の見え方**: [`display-ui-spec.md`](./display-ui-spec.md) に沿った画面文言・目標時間（例: 週平均 15 時間）の解釈。
+- **分析の見え方**: [`display-ui-spec.md`](./display-ui-spec.md) に沿った画面文言・目標時間（例: 週平均 15 時間）の解釈。在室マークは [`analytics-tab-presence-indicator.md`](./analytics-tab-presence-indicator.md)。
 - **フェーズ判断**: [`phased-guide.md`](../operations/phased-guide.md) のフェーズ1〜3に対し、「まず何を必須にするか」の合意。
 
 **レビュー成果物の例**: 受入チェックリスト、マスタ更新手順の承認、自動補正の採用／非採用。
@@ -101,7 +101,7 @@
 
 ### 3.4 GAS・スプレッドシート担当エンジニア
 
-- **範囲**: `gas/attendance.gs` と、実際のスプレッドシート上のシート構造・数式・命名（リポ外だが仕様としてレビュー対象）。
+- **範囲**: `gas/src/main.ts` と、実際のスプレッドシート上のシート構造・数式・命名（リポ外だが仕様としてレビュー対象）。
 - **観点**: `doPost` の idempotency ではないことの理解（同一 `request_id` の再送仕様が必要なら別途）、`decideAction` とログの整合、秘密の比較、大量行時のパフォーマンス、`runAutoFixBatch` / `rebuildSessionLog` / `setupAnalyticsSheets` の実行順と副作用。
 - **運用**: Web アプリの再デプロイ、トリガー重複、Script Properties と `.env` の同期。
 

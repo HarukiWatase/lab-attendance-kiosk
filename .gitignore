@@ -2,6 +2,8 @@
 .env
 .env.local
 backend/.env
+client_secret_*.json
+credentials.json
 *.pem
 
 # Python
@@ -15,6 +17,8 @@ __pycache__/
 # Node / frontend
 frontend/node_modules/
 frontend/dist/
+gas/node_modules/
+gas/dist/
 *.tsbuildinfo
 npm-debug.log*
 yarn-debug.log*

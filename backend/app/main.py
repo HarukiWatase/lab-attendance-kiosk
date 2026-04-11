@@ -78,6 +78,7 @@ class WeekCalendarRow(BaseModel):
     user_id: str
     display_name: str
     week_total_hours: float
+    is_present: bool = False
 
 
 class WeekCalendarResponse(BaseModel):
@@ -88,7 +89,7 @@ class WeekCalendarResponse(BaseModel):
 def _week_calendar_row_from_gas_item(item: object) -> WeekCalendarRow:
     """GAS のキー揺れ・文字列数値・NaN を吸収する（週次時間がフロントに載らない事故の予防）。"""
     if not isinstance(item, dict):
-        return WeekCalendarRow(user_id="", display_name="", week_total_hours=0.0)
+        return WeekCalendarRow(user_id="", display_name="", week_total_hours=0.0, is_present=False)
     d = item
     uid = str(d.get("user_id") or d.get("userId") or "").strip()
     name = str(d.get("display_name") or d.get("displayName") or uid).strip() or uid
@@ -99,7 +100,9 @@ def _week_calendar_row_from_gas_item(item: object) -> WeekCalendarRow:
         hrs = 0.0
     if hrs != hrs:  # NaN
         hrs = 0.0
-    return WeekCalendarRow(user_id=uid, display_name=name, week_total_hours=hrs)
+    raw_present = d.get("is_present", d.get("isPresent", False))
+    present = raw_present is True or str(raw_present).lower() in ("true", "1", "yes")
+    return WeekCalendarRow(user_id=uid, display_name=name, week_total_hours=hrs, is_present=present)
 
 
 class UserRow(BaseModel):
@@ -458,9 +461,15 @@ async def analytics_week_calendar() -> WeekCalendarResponse:
         return WeekCalendarResponse(
             week_start="2026-04-07",
             items=[
-                WeekCalendarRow(user_id="A10001", display_name="山田 太郎", week_total_hours=11.5),
-                WeekCalendarRow(user_id="A10002", display_name="佐藤 花子", week_total_hours=8.2),
-                WeekCalendarRow(user_id="A10003", display_name="鈴木 次郎", week_total_hours=3.0),
+                WeekCalendarRow(
+                    user_id="A10001", display_name="山田 太郎", week_total_hours=11.5, is_present=True
+                ),
+                WeekCalendarRow(
+                    user_id="A10002", display_name="佐藤 花子", week_total_hours=8.2, is_present=False
+                ),
+                WeekCalendarRow(
+                    user_id="A10003", display_name="鈴木 次郎", week_total_hours=3.0, is_present=False
+                ),
             ],
         )
     payload = await call_gas_get("analytics_week_calendar")

@@ -26,6 +26,8 @@ type AnalyticsRow = {
   displayName: string;
   /** 暦週（月曜始まり）の在室合計時間（h） */
   weekTotalHours: number;
+  /** attendance_log 上の最終打刻が「出勤」のとき true（仕様: analytics-tab-presence-indicator.md） */
+  isPresent: boolean;
 };
 
 type ScanLog = {
@@ -46,6 +48,16 @@ function parseWeekTotalHours(v: unknown): number {
   return 0;
 }
 
+function parseIsPresent(v: unknown): boolean {
+  if (v === true) return true;
+  if (v === false || v == null) return false;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    return s === "true" || s === "1" || s === "yes";
+  }
+  return false;
+}
+
 /** 本番キオスクでは可視入力・ボタンを出さない（docs/specs/frontend-kiosk-spec §2.2 / §3） */
 const IS_DEV = import.meta.env.DEV;
 const CAN_USE_MOCK = IS_DEV;
@@ -53,20 +65,20 @@ const TARGET_HOURS = 15;
 const SHOW_DEMO_FALLBACK = IS_DEV;
 
 const defaultAnalytics: AnalyticsRow[] = [
-  { userId: "A10001", displayName: "山田 太郎", weekTotalHours: 12.5 },
-  { userId: "A10002", displayName: "佐藤 花子", weekTotalHours: 9.0 },
-  { userId: "A10003", displayName: "鈴木 次郎", weekTotalHours: 4.5 },
-  { userId: "A10004", displayName: "高橋 愛", weekTotalHours: 15.0 },
-  { userId: "A10005", displayName: "伊藤 健", weekTotalHours: 11.0 },
-  { userId: "A10006", displayName: "渡辺 翼", weekTotalHours: 14.0 },
-  { userId: "A10007", displayName: "中村 明", weekTotalHours: 6.0 },
-  { userId: "A10008", displayName: "小林 陽", weekTotalHours: 16.0 },
-  { userId: "A10009", displayName: "加藤 美咲", weekTotalHours: 10.0 },
-  { userId: "A10010", displayName: "吉田 悠", weekTotalHours: 15.0 },
-  { userId: "A10011", displayName: "山本 陸", weekTotalHours: 8.0 },
-  { userId: "A10012", displayName: "松本 彩", weekTotalHours: 3.0 },
-  { userId: "A10013", displayName: "井上 蓮", weekTotalHours: 13.0 },
-  { userId: "A10014", displayName: "木村 華", weekTotalHours: 7.5 }
+  { userId: "A10001", displayName: "山田 太郎", weekTotalHours: 12.5, isPresent: true },
+  { userId: "A10002", displayName: "佐藤 花子", weekTotalHours: 9.0, isPresent: false },
+  { userId: "A10003", displayName: "鈴木 次郎", weekTotalHours: 4.5, isPresent: false },
+  { userId: "A10004", displayName: "高橋 愛", weekTotalHours: 15.0, isPresent: true },
+  { userId: "A10005", displayName: "伊藤 健", weekTotalHours: 11.0, isPresent: false },
+  { userId: "A10006", displayName: "渡辺 翼", weekTotalHours: 14.0, isPresent: false },
+  { userId: "A10007", displayName: "中村 明", weekTotalHours: 6.0, isPresent: false },
+  { userId: "A10008", displayName: "小林 陽", weekTotalHours: 16.0, isPresent: false },
+  { userId: "A10009", displayName: "加藤 美咲", weekTotalHours: 10.0, isPresent: false },
+  { userId: "A10010", displayName: "吉田 悠", weekTotalHours: 15.0, isPresent: true },
+  { userId: "A10011", displayName: "山本 陸", weekTotalHours: 8.0, isPresent: false },
+  { userId: "A10012", displayName: "松本 彩", weekTotalHours: 3.0, isPresent: false },
+  { userId: "A10013", displayName: "井上 蓮", weekTotalHours: 13.0, isPresent: false },
+  { userId: "A10014", displayName: "木村 華", weekTotalHours: 7.5, isPresent: false }
 ];
 
 const defaultUserDirectory: Record<string, string> = {
@@ -238,7 +250,8 @@ export default function App() {
               return {
                 userId,
                 displayName,
-                weekTotalHours: parseWeekTotalHours(rawHours)
+                weekTotalHours: parseWeekTotalHours(rawHours),
+                isPresent: parseIsPresent(r.is_present ?? r.isPresent)
               };
             })
           );
@@ -641,18 +654,24 @@ export default function App() {
                   <tbody>
                     {sortedAnalytics.map((row) => {
                       const p = Math.min(100, Math.round((row.weekTotalHours / TARGET_HOURS) * 100));
-                      const status =
-                        row.weekTotalHours >= 15 ? "達成" : row.weekTotalHours >= 12 ? "注意" : "要改善";
-                      const barTone =
-                        status === "達成"
-                          ? "bg-neutral-900"
-                          : status === "注意"
-                            ? "bg-neutral-600"
-                            : "bg-neutral-400";
+                      const status = row.weekTotalHours >= TARGET_HOURS ? "達成" : "未達成";
+                      const barTone = status === "達成" ? "bg-neutral-900" : "bg-neutral-400";
                       return (
                         <tr key={row.userId} className="border-b border-neutral-100 last:border-0">
-                          <td className={`truncate pr-2 font-medium text-neutral-900 ${IS_DEV ? "max-w-[7rem] py-1" : "max-w-[14rem] py-2"}`}>
-                            {row.displayName}
+                          <td className={`pr-2 font-medium text-neutral-900 ${IS_DEV ? "max-w-[10rem] py-1" : "max-w-[18rem] py-2"}`}>
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span className="min-w-0 truncate">{row.displayName}</span>
+                              {row.isPresent ? (
+                                <span
+                                  className={`inline-flex shrink-0 items-center justify-center rounded-md border border-neutral-300/90 bg-neutral-100 px-1.5 py-[3px] font-medium leading-none tracking-wide text-neutral-700 ${
+                                    IS_DEV ? "text-[0.6rem]" : "text-xs md:text-sm"
+                                  }`}
+                                  aria-label="在室"
+                                >
+                                  在室
+                                </span>
+                              ) : null}
+                            </span>
                           </td>
                           <td
                             className={`whitespace-nowrap pr-2 font-mono text-neutral-500 ${
@@ -667,7 +686,7 @@ export default function App() {
                               {status}
                             </span>
                           </td>
-                          <td className={`align-middle ${IS_DEV ? "py-1" : "py-2"}`}>
+                          <td className={`${IS_DEV ? "py-1" : "py-2"}`}>
                             <div className={`${IS_DEV ? "h-px" : "h-1.5 md:h-2"} overflow-hidden bg-neutral-200`}>
                               <div
                                 className={`h-full ${barTone} transition-[width] duration-700 ease-smooth`}

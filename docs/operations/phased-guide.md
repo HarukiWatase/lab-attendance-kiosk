@@ -33,7 +33,7 @@
 
 ### 1-2. GAS（Apps Script）で必ず行うこと
 
-1. 本リポジトリの `gas/attendance.gs` と同等のスクリプトをスプレッドシートに紐づけて保存する。
+1. 本リポジトリの `gas/src/main.ts` をビルドした成果物（`gas/dist/*.js`）を clasp でスプレッドシートに紐づくプロジェクトへ push する。
 2. **スクリプトプロパティ**に共有秘密を入れる（`setScriptProperties()` をエディタで1回実行するか、プロジェクトの設定から手入力）:
    - `GAS_SHARED_SECRET` … バックエンド `.env` の `GAS_SHARED_SECRET` と**同一**の文字列。
    - `AUTO_FIX_HOURS` … 仕様上 `0` でよい（自動補正で「退勤時刻」を何時間ずらすか。`0` は前日未退勤者に対し**同日時刻の補正退勤**を書く動きになる）。
@@ -82,7 +82,7 @@
 
 | 対象 | 内容 |
 |------|------|
-| GAS `setupAnalyticsSheets` | `summary_semester` / `dashboard` 草案や数式の一括作成。`session_log` と連動する前提。 |
+| GAS `setupAnalyticsSheets` | `summary_semester` の数式の一括作成。`session_log` と連動する前提。 |
 | シート `summary_weekly` など | 週次正規表・グラフ（別途設計どおり）。 |
 | GAS `doGet` `mode=analytics_semester` | 前期・週平均などを API で返す。 |
 | バックエンド `GET /api/view/analytics/semester` | 上記をフロント向けに中継。 |
@@ -96,7 +96,9 @@
 
 - [ ] スクリプトプロパティ: `GAS_SHARED_SECRET`, `AUTO_FIX_HOURS` が意図どおり。
 - [ ] ウェブアプリを**新しいバージョンとして再デプロイ**した（`doPost` / `doGet` を追加したあとに必要になりがち）。
-- [ ] トリガー一覧に `runAutoFixBatch` が1本ある（毎日 5 時）。不要なら削除してよい。
+- [ ] 時間トリガー: `clasp push` では付かない。**Apps Script エディタで `installAutomationTriggers()` を実行**（手順は [`gas-triggers-and-clasp.md`](./gas-triggers-and-clasp.md)）。
+- [ ] トリガー一覧に `runAutoFixBatch` / `runMonthlyCloseForPreviousMonth` が意図どおり（`listAutomationTriggers()` で確認）。
+- [ ] 失敗検知用に `99_automation_log` の直近行を目視（GAS が自動追記）。
 - [ ] `user_master` と QR の `user_id` が一致している。
 
 ---
@@ -106,5 +108,9 @@
 - 本書: **いま何を設定すればよいか**をフェーズで切る「運用の入口」。
 - [`remaining-improvements.md`](./remaining-improvements.md): 分析・品質・本番運用の改善リスト（フェーズ3寄り）。
 - [`guide.md`](../specs/guide.md): システム全体の仕様（API・エラー・時間など）。
+- [`semester-transition-runbook.md`](./semester-transition-runbook.md): 前期・後期切替のチェックリスト。
+- [`summary-semester-vs-professor-metrics.md`](./summary-semester-vs-professor-metrics.md): 集計の「正データ」の定義。
+- [`gas-triggers-and-clasp.md`](./gas-triggers-and-clasp.md): トリガーと clasp の関係。
+- [`spreadsheet-lifecycle-protection.md`](./spreadsheet-lifecycle-protection.md): ログ寿命・保護・索引。
 
 分析を後回しにする場合は、**フェーズ1のチェックが通っていれば当面十分**です。フェーズ2・3は「ログの補正・セッション化・集計」を始めるタイミングで読み直してください。
