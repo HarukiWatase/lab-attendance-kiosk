@@ -21,6 +21,17 @@ function doGet(e) {
     if (mode === "users") {
       return jsonResponse({ ok: true, items: getUserDirectoryItems() });
     }
+    if (mode === "ranking") {
+      const thisWeekStart = getCurrentCalendarWeekStartYmd();
+      const lastWeekStart = getPreviousCalendarWeekStartYmd();
+      const thisWeekItems = getWeeklyCalendarAnalyticsItems(thisWeekStart);
+      const lastWeekItems = getWeeklyCalendarAnalyticsItems(lastWeekStart);
+      return jsonResponse({
+        ok: true,
+        this_week: { week_start: thisWeekStart, items: thisWeekItems },
+        last_week: { week_start: lastWeekStart, items: lastWeekItems }
+      });
+    }
     if (mode === "request_status") {
       const requestId = (e && e.parameter && e.parameter.request_id) || "";
       if (!requestId) {
@@ -94,6 +105,12 @@ function doPost(e) {
 
 function getCurrentCalendarWeekStartYmd() {
   return getWeekStartYmd(new Date());
+}
+
+function getPreviousCalendarWeekStartYmd() {
+  const now = new Date();
+  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  return getWeekStartYmd(oneWeekAgo);
 }
 
 /**

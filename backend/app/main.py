@@ -86,6 +86,20 @@ class WeekCalendarResponse(BaseModel):
     items: list[WeekCalendarRow]
 
 
+class RankingRow(BaseModel):
+    rank: int
+    user_id: str
+    display_name: str
+    total_hours: float
+
+
+class WeeklyRankingResponse(BaseModel):
+    this_week_start: str
+    last_week_start: str
+    this_week: list[RankingRow]
+    last_week: list[RankingRow]
+
+
 def _week_calendar_row_from_gas_item(item: object) -> WeekCalendarRow:
     """GAS のキー揺れ・文字列数値・NaN を吸収する（週次時間がフロントに載らない事故の予防）。"""
     if not isinstance(item, dict):
@@ -485,3 +499,65 @@ async def analytics_week_calendar() -> WeekCalendarResponse:
 @app.get("/api/view/users", response_model=list[UserRow])
 async def users() -> list[UserRow]:
     return await get_user_rows_cached()
+
+
+def _ranking_rows_from_items(items: list) -> list[RankingRow]:
+    """GAS から受け取ったアイテムリストをランキング行に変換する。"""
+    rows = []
+    for i, item in enumerate(items, start=1):
+        if not isinstance(item, dict):
+            continue
+        uid = str(item.get("user_id") or item.get("userId") or "").strip()
+        name = str(item.get("display_name") or item.get("displayName") or uid).strip() or uid
+        raw = item.get("total_hours", item.get("totalHours", item.get("week_total_hours", 0)))
+        try:
+            hrs = float(raw)
+        except (TypeError, ValueError):
+            hrs = 0.0
+        if hrs != hrs:  # NaN
+            hrs = 0.0
+        rank = int(item.get("rank", i))
+        rows.append(RankingRow(rank=rank, user_id=uid, display_name=name, total_hours=hrs))
+    return rows
+
+
+@app.get("/api/view/ranking/weekly", response_model=WeeklyRankingResponse)
+async def ranking_weekly() -> WeeklyRankingResponse:
+    if should_use_local_mock():
+        this_week = [
+            RankingRow(rank=1, user_id="A10008", display_name="小林 陽", total_hours=32.0),
+            RankingRow(rank=2, user_id="A10004", display_name="高橋 愛", total_hours=29.5),
+            RankingRow(rank=3, user_id="A10010", display_name="吉田 悠", total_hours=27.0),
+            RankingRow(rank=4, user_id="A10006", display_name="渡辺 翼", total_hours=24.0),
+            RankingRow(rank=5, user_id="A10001", display_name="山田 太郎", total_hours=21.5),
+        ]
+        last_week = [
+            RankingRow(rank=1, user_id="A10006", display_name="渡辺 翼", total_hours=35.0),
+            RankingRow(rank=2, user_id="A10010", display_name="吉田 悠", total_hours=30.0),
+            RankingRow(rank=3, user_id="A10004", display_name="高橋 愛", total_hours=26.5),
+            RankingRow(rank=4, user_id="A10008", display_name="小林 陽", total_hours=22.0),
+            RankingRow(rank=5, user_id="A10013", display_name="井上 蓮", total_hours=19.0),
+        ]
+        from datetime import timedelta
+        now = now_jst()
+        # 今週月曜
+        this_monday = now - timedelta(days=now.weekday())
+        last_monday = this_monday - timedelta(weeks=1)
+        return WeeklyRankingResponse(
+            this_week_start=this_monday.strftime("%Y-%m-%d"),
+            last_week_start=last_monday.strftime("%Y-%m-%d"),
+            this_week=this_week,
+            last_week=last_week,
+        )
+    payload = await call_gas_get("ranking")
+    this_week_data = payload.get("this_week") or {}
+    last_week_data = payload.get("last_week") or {}
+    
+    this_week = _ranking_rows_from_items(this_week_data.get("items", []))
+    last_week = _ranking_rows_from_items(last_week_data.get("items", []))
+    return WeeklyRankingResponse(
+        this_week_start=str(this_week_data.get("week_start") or ""),
+        last_week_start=str(last_week_data.get("week_start") or ""),
+        this_week=this_week,
+        last_week=last_week,
+    )

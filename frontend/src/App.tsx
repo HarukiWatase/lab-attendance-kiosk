@@ -37,6 +37,20 @@ type ScanLog = {
   action: string | null;
 };
 
+type RankingRow = {
+  rank: number;
+  userId: string;
+  displayName: string;
+  totalHours: number;
+};
+
+type WeeklyRanking = {
+  thisWeekStart: string;
+  lastWeekStart: string;
+  thisWeek: RankingRow[];
+  lastWeek: RankingRow[];
+};
+
 const API_BASE = "";
 
 function parseWeekTotalHours(v: unknown): number {
@@ -88,6 +102,25 @@ const defaultUserDirectory: Record<string, string> = {
   ...Object.fromEntries(defaultAnalytics.map((u) => [u.userId, u.displayName]))
 };
 
+const defaultRanking: WeeklyRanking = {
+  thisWeekStart: "",
+  lastWeekStart: "",
+  thisWeek: [
+    { rank: 1, userId: "A10008", displayName: "小林 陽", totalHours: 32.0 },
+    { rank: 2, userId: "A10004", displayName: "高橋 愛", totalHours: 29.5 },
+    { rank: 3, userId: "A10010", displayName: "吉田 悠", totalHours: 27.0 },
+    { rank: 4, userId: "A10006", displayName: "渡辺 翼", totalHours: 24.0 },
+    { rank: 5, userId: "A10001", displayName: "山田 太郎", totalHours: 21.5 },
+  ],
+  lastWeek: [
+    { rank: 1, userId: "A10006", displayName: "渡辺 翼", totalHours: 35.0 },
+    { rank: 2, userId: "A10010", displayName: "吉田 悠", totalHours: 30.0 },
+    { rank: 3, userId: "A10004", displayName: "高橋 愛", totalHours: 26.5 },
+    { rank: 4, userId: "A10008", displayName: "小林 陽", totalHours: 22.0 },
+    { rank: 5, userId: "A10013", displayName: "井上 蓮", totalHours: 19.0 },
+  ],
+};
+
 function TabLink({
   active,
   onClick,
@@ -130,6 +163,10 @@ export default function App() {
   );
   const [viewDataError, setViewDataError] = useState("");
   const [weekStartLabel, setWeekStartLabel] = useState("");
+  const [weeklyRanking, setWeeklyRanking] = useState<WeeklyRanking>(
+    SHOW_DEMO_FALLBACK ? defaultRanking : { thisWeekStart: "", lastWeekStart: "", thisWeek: [], lastWeek: [] }
+  );
+  const [rankingTab, setRankingTab] = useState<"this" | "last">("this");
   const [isOnline, setIsOnline] = useState(
     typeof navigator === "undefined" ? true : navigator.onLine
   );
@@ -225,6 +262,40 @@ export default function App() {
       }
     };
     void loadUsersOnly();
+  }, []);
+
+  useEffect(() => {
+    const loadRanking = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/view/ranking/weekly`);
+        if (!res.ok) return;
+        const body = (await res.json()) as {
+          this_week_start: string;
+          last_week_start: string;
+          this_week: Array<Record<string, unknown>>;
+          last_week: Array<Record<string, unknown>>;
+        };
+        const parseRows = (items: Array<Record<string, unknown>>): RankingRow[] =>
+          items.map((r, i) => ({
+            rank: typeof r.rank === "number" ? r.rank : i + 1,
+            userId: String(r.user_id ?? r.userId ?? "").trim(),
+            displayName: String(r.display_name ?? r.displayName ?? "").trim(),
+            totalHours: parseWeekTotalHours(r.total_hours ?? r.totalHours),
+          }));
+        setWeeklyRanking({
+          thisWeekStart: String(body.this_week_start || ""),
+          lastWeekStart: String(body.last_week_start || ""),
+          thisWeek: parseRows(body.this_week || []),
+          lastWeek: parseRows(body.last_week || []),
+        });
+      } catch {
+        /* ランキング取得失敗時はデモデータのまま */
+      }
+    };
+    void loadRanking();
+    // 10分ごとに更新
+    const timer = window.setInterval(() => void loadRanking(), 10 * 60 * 1000);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -570,6 +641,108 @@ export default function App() {
                   ))}
                 </ul>
               )}
+            </section>
+
+            <section className={`border-t border-neutral-300/70 ${IS_DEV ? "pt-10" : "pt-12"}`}>
+              <div className={`flex items-center justify-between ${IS_DEV ? "mb-6" : "mb-8"}`}>
+                <h2 className="text-[0.65rem] font-medium uppercase tracking-[0.22em] text-neutral-400">
+                  滞在時間ランキング
+                </h2>
+                <div className="flex gap-1 rounded-lg border border-neutral-200 bg-neutral-100/80 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setRankingTab("this")}
+                    className={`rounded-md px-3 py-1 text-[0.65rem] font-medium tracking-wider transition-all duration-200 ${
+                      rankingTab === "this"
+                        ? "bg-white text-neutral-900 shadow-sm"
+                        : "text-neutral-400 hover:text-neutral-600"
+                    }`}
+                  >
+                    今週
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRankingTab("last")}
+                    className={`rounded-md px-3 py-1 text-[0.65rem] font-medium tracking-wider transition-all duration-200 ${
+                      rankingTab === "last"
+                        ? "bg-white text-neutral-900 shadow-sm"
+                        : "text-neutral-400 hover:text-neutral-600"
+                    }`}
+                  >
+                    先週
+                  </button>
+                </div>
+              </div>
+              {(() => {
+                const rows = rankingTab === "this" ? weeklyRanking.thisWeek : weeklyRanking.lastWeek;
+                const weekLabel = rankingTab === "this"
+                  ? weeklyRanking.thisWeekStart
+                  : weeklyRanking.lastWeekStart;
+                const rankMedals = ["🥇", "🥈", "🥉"];
+                const maxHours = rows.length > 0 ? rows[0].totalHours : 1;
+                return (
+                  <div className="space-y-2">
+                    {weekLabel && (
+                      <p className="mb-3 text-[0.6rem] tracking-wider text-neutral-400">{weekLabel}〜</p>
+                    )}
+                    {rows.length === 0 ? (
+                      <p className={`${IS_DEV ? "text-sm" : "text-base md:text-lg"} font-light text-neutral-400`}>
+                        データがありません
+                      </p>
+                    ) : (
+                      rows.slice(0, 3).map((row) => {
+                        const barPct = Math.round((row.totalHours / maxHours) * 100);
+                        const medal = row.rank <= 3 ? rankMedals[row.rank - 1] : null;
+                        return (
+                          <div
+                            key={row.userId}
+                            className={`relative flex items-center gap-3 overflow-hidden rounded-xl border ${
+                              row.rank === 1
+                                ? "border-amber-200/80 bg-amber-50/60"
+                                : row.rank === 2
+                                  ? "border-neutral-300/80 bg-neutral-50/80"
+                                  : row.rank === 3
+                                    ? "border-orange-200/60 bg-orange-50/40"
+                                    : "border-neutral-200/60 bg-white/60"
+                            } ${IS_DEV ? "px-3 py-2" : "px-4 py-3"}`}
+                          >
+                            <div
+                              className={`absolute inset-y-0 left-0 transition-[width] duration-700 ease-smooth ${
+                                row.rank === 1
+                                  ? "bg-amber-100/60"
+                                  : row.rank === 2
+                                    ? "bg-neutral-100/60"
+                                    : row.rank === 3
+                                      ? "bg-orange-100/40"
+                                      : "bg-neutral-100/30"
+                              }`}
+                              style={{ width: `${barPct}%` }}
+                              aria-hidden
+                            />
+                            <span className={`relative shrink-0 ${IS_DEV ? "w-6 text-base" : "w-8 text-xl"} text-center`}>
+                              {medal ?? (
+                                <span className={`font-medium tabular-nums text-neutral-400 ${
+                                  IS_DEV ? "text-xs" : "text-sm"
+                                }`}>{row.rank}</span>
+                              )}
+                            </span>
+                            <span className={`relative flex-1 truncate font-medium text-neutral-800 ${
+                              IS_DEV ? "text-sm" : "text-base md:text-lg"
+                            }`}>
+                              {row.displayName}
+                            </span>
+                            <span className={`relative shrink-0 tabular-nums font-semibold ${
+                              row.rank === 1 ? "text-amber-700" : "text-neutral-600"
+                            } ${IS_DEV ? "text-sm" : "text-base md:text-lg"}`}>
+                              {row.totalHours}h
+                            </span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                );
+              })()}
             </section>
           </div>
         )}
