@@ -178,36 +178,52 @@ export default function App() {
   const scanInputRef = useRef<HTMLInputElement>(null);
   const scannerBufferRef = useRef("");
   const mainRef = useRef<HTMLElement>(null);
+  /** main 直下の実コンテンツラッパー。ResizeObserver で監視する */
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // 画面サイズに応じてコンテンツをスケーリング（スクロール不要にする）
+  // contentRef（コンテンツラッパー）を監視し、main には触れないのでループしない
   const applyScale = useCallback(() => {
-    const el = mainRef.current;
-    if (!el) return;
-    // 一旦スケールをリセットしてナチュラルサイズを取得
-    el.style.transform = "none";
-    el.style.width = "";
-    el.style.height = "";
-    const naturalW = el.scrollWidth;
-    const naturalH = el.scrollHeight;
+    const main = mainRef.current;
+    const content = contentRef.current;
+    if (!main || !content) return;
+
+    // main のスケールをリセットして content の自然サイズを計測
+    main.style.transform = "none";
+    main.style.width = "";
+    main.style.height = "";
+
+    const naturalW = content.scrollWidth;
+    const naturalH = content.scrollHeight;
     const vpW = window.innerWidth;
     const vpH = window.innerHeight;
-    const scaleX = vpW / naturalW;
-    const scaleY = vpH / naturalH;
-    const scale = Math.min(scaleX, scaleY, 1); // 拡大はしない
+
+    const scale = Math.min(vpW / naturalW, vpH / naturalH, 1); // 拡大はしない
+
     if (scale < 1) {
-      el.style.transformOrigin = "top left";
-      el.style.transform = `scale(${scale})`;
-      // transform後の見た目サイズ分だけbodyがスクロールしないよう幅・高さを固定
-      el.style.width = `${vpW / scale}px`;
-      el.style.height = `${vpH / scale}px`;
+      // transform は layout に影響しないため、main の幅・高さを固定してスクロールを防ぐ
+      main.style.transformOrigin = "top left";
+      main.style.transform = `scale(${scale})`;
+      main.style.width = `${vpW / scale}px`;
+      main.style.height = `${vpH / scale}px`;
     }
   }, []);
 
   useEffect(() => {
-    applyScale();
+    const content = contentRef.current;
+    if (!content) return;
+
+    // コンテンツラッパーのサイズ変化（ログ追加など）を自動検知
+    // main 自体を監視しないので「スケール適用→サイズ変化→再発火」ループが起きない
+    const observer = new ResizeObserver(() => applyScale());
+    observer.observe(content);
     window.addEventListener("resize", applyScale);
-    return () => window.removeEventListener("resize", applyScale);
-  }, [applyScale, tab]);
+    applyScale(); // 初回
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", applyScale);
+    };
+  }, [applyScale]);
 
   // ── スクリーンセーバー（液晶焼け防止）────────────────────────────
   // 本番モードのみ有効。5分間無操作でブラックアウト。
@@ -404,7 +420,7 @@ export default function App() {
   };
 
   const pushLog = (log: ScanLog) => {
-    setLogs((prev) => [log, ...prev].slice(0, 6));
+    setLogs((prev) => [log, ...prev].slice(0, 8));
   };
 
   const normalizeUserId = (raw: string) =>
@@ -536,7 +552,9 @@ export default function App() {
   }, [tab, state, userId, userDirectory]);
 
   return (
-    <main ref={mainRef} className="relative min-h-screen overflow-hidden bg-[#f4f4f1] pt-3 md:pt-4 font-sans text-neutral-900">
+    <main ref={mainRef} className="relative overflow-hidden bg-[#f4f4f1] font-sans text-neutral-900">
+      {/* contentRef でコンテンツの自然サイズを計測。main 自体は計測対象外 */}
+      <div ref={contentRef} className="min-h-screen pt-3 md:pt-4">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-70"
@@ -665,32 +683,89 @@ export default function App() {
             </section>
 
             <section className={`border-t border-neutral-300/70 ${IS_DEV ? "pt-12" : "pt-14"}`}>
-              <h2 className="mb-8 text-[0.65rem] font-medium uppercase tracking-[0.22em] text-neutral-400">
+              <h2 className="mb-4 text-[0.65rem] font-medium uppercase tracking-[0.22em] text-neutral-400">
                 直近の記録
               </h2>
-              {logs.length === 0 ? (
-                <p className={`${IS_DEV ? "text-sm" : "text-base md:text-lg"} font-light text-neutral-400`}>
-                  記録はまだありません
-                </p>
-              ) : (
-                <ul className="space-y-0 divide-y divide-neutral-200/90">
-                  {logs.map((log, idx) => (
-                    <li
-                      key={`${log.at}-${idx}`}
-                      className={`flex flex-wrap items-baseline justify-between gap-4 transition-colors duration-300 first:pt-0 ${IS_DEV ? "py-4 text-sm" : "py-5 text-base md:text-lg"
-                        }`}
-                    >
-                      <span className="tabular-nums text-neutral-400">{log.at}</span>
-                      <span className="flex-1 font-medium text-neutral-800">{log.actor}</span>
-                      <span className="text-xs tracking-wider text-neutral-500">
-                        {log.result}
-                        {log.action ? ` · ${log.action}` : ""}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <div className="flex gap-0">
+                {/*
+                  左列 (slots 0-3) ｜仕切り線｜ 右列 (slots 4-7)
+                  各列内は上→下の縦スタック（4行×2列）
+                */}
+                {/* 左列: 新しい順 1～4件目 */}
+                <div className="flex flex-1 flex-col">
+                  {[0, 1, 2, 3].map((i) => {
+                    const log = logs[i];
+                    const resultLabel = log
+                      ? log.result === "success_in" ? "入室"
+                        : log.result === "success_out" ? "退室"
+                        : log.result === "blocked" ? "封鎖"
+                        : "エラー"
+                      : null;
+                    return (
+                      <div
+                        key={i}
+                        className={`flex items-center gap-2 border-b border-neutral-200/70 ${
+                          IS_DEV ? "py-2 text-sm" : "py-3 text-base"
+                        } ${!log ? "pointer-events-none select-none" : ""}`}
+                      >
+                        {log ? (
+                          <>
+                            <span className={`shrink-0 tabular-nums text-neutral-400 ${IS_DEV ? "text-xs" : "text-sm"}`}>{log.at}</span>
+                            <span className="min-w-0 flex-1 truncate font-medium text-neutral-800">{log.actor}</span>
+                            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[0.6rem] font-medium tracking-wide ${
+                              log.result === "success_in" ? "bg-emerald-100 text-emerald-700"
+                                : log.result === "success_out" ? "bg-red-100 text-red-700"
+                                : "bg-amber-100 text-amber-700"
+                            }`}>{resultLabel}</span>
+                          </>
+                        ) : (
+                          <span className="invisible select-none" aria-hidden>—</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* 中央仕切り線 */}
+                <div className={`shrink-0 self-stretch bg-neutral-300/70 ${IS_DEV ? "mx-4 w-px" : "mx-6 w-px"}`} aria-hidden />
+
+                {/* 右列: 新しい順 5～8件目 */}
+                <div className="flex flex-1 flex-col">
+                  {[4, 5, 6, 7].map((i) => {
+                    const log = logs[i];
+                    const resultLabel = log
+                      ? log.result === "success_in" ? "入室"
+                        : log.result === "success_out" ? "退室"
+                        : log.result === "blocked" ? "封鎖"
+                        : "エラー"
+                      : null;
+                    return (
+                      <div
+                        key={i}
+                        className={`flex items-center gap-2 border-b border-neutral-200/70 ${
+                          IS_DEV ? "py-2 text-sm" : "py-3 text-base"
+                        } ${!log ? "pointer-events-none select-none" : ""}`}
+                      >
+                        {log ? (
+                          <>
+                            <span className={`shrink-0 tabular-nums text-neutral-400 ${IS_DEV ? "text-xs" : "text-sm"}`}>{log.at}</span>
+                            <span className="min-w-0 flex-1 truncate font-medium text-neutral-800">{log.actor}</span>
+                            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[0.6rem] font-medium tracking-wide ${
+                              log.result === "success_in" ? "bg-emerald-100 text-emerald-700"
+                                : log.result === "success_out" ? "bg-red-100 text-red-700"
+                                : "bg-amber-100 text-amber-700"
+                            }`}>{resultLabel}</span>
+                          </>
+                        ) : (
+                          <span className="invisible select-none" aria-hidden>—</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </section>
+
 
             <section className={`border-t border-neutral-300/70 ${IS_DEV ? "pt-10" : "pt-12"}`}>
               <h2 className={`text-[0.65rem] font-medium uppercase tracking-[0.22em] text-neutral-400 ${IS_DEV ? "mb-6" : "mb-8"}`}>
@@ -956,6 +1031,7 @@ export default function App() {
           onKeyDown={resetIdleTimer}
         />
       )}
+      </div>{/* /contentRef wrapper */}
     </main>
   );
 }
