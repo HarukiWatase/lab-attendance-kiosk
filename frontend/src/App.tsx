@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type ViewState =
   | "idle"
@@ -35,6 +35,20 @@ type ScanLog = {
   actor: string;
   result: ViewState;
   action: string | null;
+};
+
+type RankingRow = {
+  rank: number;
+  userId: string;
+  displayName: string;
+  totalHours: number;
+};
+
+type WeeklyRanking = {
+  thisWeekStart: string;
+  lastWeekStart: string;
+  thisWeek: RankingRow[];
+  lastWeek: RankingRow[];
 };
 
 const API_BASE = "";
@@ -88,6 +102,25 @@ const defaultUserDirectory: Record<string, string> = {
   ...Object.fromEntries(defaultAnalytics.map((u) => [u.userId, u.displayName]))
 };
 
+const defaultRanking: WeeklyRanking = {
+  thisWeekStart: "",
+  lastWeekStart: "",
+  thisWeek: [
+    { rank: 1, userId: "A10008", displayName: "小林 陽", totalHours: 32.0 },
+    { rank: 2, userId: "A10004", displayName: "高橋 愛", totalHours: 29.5 },
+    { rank: 3, userId: "A10010", displayName: "吉田 悠", totalHours: 27.0 },
+    { rank: 4, userId: "A10006", displayName: "渡辺 翼", totalHours: 24.0 },
+    { rank: 5, userId: "A10001", displayName: "山田 太郎", totalHours: 21.5 },
+  ],
+  lastWeek: [
+    { rank: 1, userId: "A10006", displayName: "渡辺 翼", totalHours: 35.0 },
+    { rank: 2, userId: "A10010", displayName: "吉田 悠", totalHours: 30.0 },
+    { rank: 3, userId: "A10004", displayName: "高橋 愛", totalHours: 26.5 },
+    { rank: 4, userId: "A10008", displayName: "小林 陽", totalHours: 22.0 },
+    { rank: 5, userId: "A10013", displayName: "井上 蓮", totalHours: 19.0 },
+  ],
+};
+
 function TabLink({
   active,
   onClick,
@@ -101,20 +134,21 @@ function TabLink({
     <button
       type="button"
       onClick={onClick}
-      className={`relative pb-3 text-sm font-medium tracking-[0.12em] transition-colors duration-300 ease-out ${
-        active ? "text-neutral-900" : "text-neutral-400 hover:text-neutral-600"
-      }`}
+      className={`relative pb-3 text-sm font-medium tracking-[0.12em] transition-colors duration-300 ease-out ${active ? "text-neutral-900" : "text-neutral-400 hover:text-neutral-600"
+        }`}
     >
       {children}
       <span
-        className={`absolute bottom-0 left-0 right-0 h-px origin-left bg-neutral-900 transition-transform duration-500 ease-smooth ${
-          active ? "scale-x-100" : "scale-x-0"
-        }`}
+        className={`absolute bottom-0 left-0 right-0 h-px origin-left bg-neutral-900 transition-transform duration-500 ease-smooth ${active ? "scale-x-100" : "scale-x-0"
+          }`}
         aria-hidden
       />
     </button>
   );
 }
+
+/** 無操作ブラックアウトまでの時間（ms）。開発時は無効化。 */
+const BLACKOUT_TIMEOUT_MS = 5 * 60 * 1000;
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("scan");
@@ -130,14 +164,89 @@ export default function App() {
   );
   const [viewDataError, setViewDataError] = useState("");
   const [weekStartLabel, setWeekStartLabel] = useState("");
+  const [weeklyRanking, setWeeklyRanking] = useState<WeeklyRanking>(
+    SHOW_DEMO_FALLBACK ? defaultRanking : { thisWeekStart: "", lastWeekStart: "", thisWeek: [], lastWeek: [] }
+  );
   const [isOnline, setIsOnline] = useState(
     typeof navigator === "undefined" ? true : navigator.onLine
   );
   const [nowLabel, setNowLabel] = useState(() =>
     new Date().toLocaleString("ja-JP", { hour12: false })
   );
+  const [isBlackout, setIsBlackout] = useState(false);
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scanInputRef = useRef<HTMLInputElement>(null);
   const scannerBufferRef = useRef("");
+  const mainRef = useRef<HTMLElement>(null);
+  /** main 直下の実コンテンツラッパー。ResizeObserver で監視する */
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // 画面サイズに応じてコンテンツをスケーリング（スクロール不要にする）
+  // contentRef（コンテンツラッパー）を監視し、main には触れないのでループしない
+  const applyScale = useCallback(() => {
+    const main = mainRef.current;
+    const content = contentRef.current;
+    if (!main || !content) return;
+
+    // main のスケールをリセットして content の自然サイズを計測
+    main.style.transform = "none";
+    main.style.width = "";
+    main.style.height = "";
+
+    const naturalW = content.scrollWidth;
+    const naturalH = content.scrollHeight;
+    const vpW = window.innerWidth;
+    const vpH = window.innerHeight;
+
+    const scale = Math.min(vpW / naturalW, vpH / naturalH, 1); // 拡大はしない
+
+    if (scale < 1) {
+      // transform は layout に影響しないため、main の幅・高さを固定してスクロールを防ぐ
+      main.style.transformOrigin = "top left";
+      main.style.transform = `scale(${scale})`;
+      main.style.width = `${vpW / scale}px`;
+      main.style.height = `${vpH / scale}px`;
+    }
+  }, []);
+
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+
+    // コンテンツラッパーのサイズ変化（ログ追加など）を自動検知
+    // main 自体を監視しないので「スケール適用→サイズ変化→再発火」ループが起きない
+    const observer = new ResizeObserver(() => applyScale());
+    observer.observe(content);
+    window.addEventListener("resize", applyScale);
+    applyScale(); // 初回
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", applyScale);
+    };
+  }, [applyScale]);
+
+  // ── スクリーンセーバー（液晶焼け防止）────────────────────────────
+  // 本番モードのみ有効。5分間無操作でブラックアウト。
+  const resetIdleTimer = useCallback(() => {
+    if (IS_DEV) return;
+    if (idleTimerRef.current !== null) clearTimeout(idleTimerRef.current);
+    setIsBlackout(false);
+    idleTimerRef.current = setTimeout(() => {
+      setIsBlackout(true);
+    }, BLACKOUT_TIMEOUT_MS);
+  }, []);
+
+  useEffect(() => {
+    if (IS_DEV) return;
+    const events = ["mousemove", "mousedown", "pointerdown", "keydown", "touchstart", "scroll"] as const;
+    const handler = () => resetIdleTimer();
+    events.forEach((ev) => window.addEventListener(ev, handler, { passive: true }));
+    resetIdleTimer(); // 初回タイマー起動
+    return () => {
+      events.forEach((ev) => window.removeEventListener(ev, handler));
+      if (idleTimerRef.current !== null) clearTimeout(idleTimerRef.current);
+    };
+  }, [resetIdleTimer]);
 
   const hint = useMemo(() => {
     if (state === "processing") return "処理しています";
@@ -228,6 +337,40 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const loadRanking = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/view/ranking/weekly`);
+        if (!res.ok) return;
+        const body = (await res.json()) as {
+          this_week_start: string;
+          last_week_start: string;
+          this_week: Array<Record<string, unknown>>;
+          last_week: Array<Record<string, unknown>>;
+        };
+        const parseRows = (items: Array<Record<string, unknown>>): RankingRow[] =>
+          items.map((r, i) => ({
+            rank: typeof r.rank === "number" ? r.rank : i + 1,
+            userId: String(r.user_id ?? r.userId ?? "").trim(),
+            displayName: String(r.display_name ?? r.displayName ?? "").trim(),
+            totalHours: parseWeekTotalHours(r.total_hours ?? r.totalHours),
+          }));
+        setWeeklyRanking({
+          thisWeekStart: String(body.this_week_start || ""),
+          lastWeekStart: String(body.last_week_start || ""),
+          thisWeek: parseRows(body.this_week || []),
+          lastWeek: parseRows(body.last_week || []),
+        });
+      } catch {
+        /* ランキング取得失敗時はデモデータのまま */
+      }
+    };
+    void loadRanking();
+    // 10分ごとに更新
+    const timer = window.setInterval(() => void loadRanking(), 10 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     if (tab !== "analytics") return;
 
     const loadWeekAnalytics = async () => {
@@ -277,7 +420,7 @@ export default function App() {
   };
 
   const pushLog = (log: ScanLog) => {
-    setLogs((prev) => [log, ...prev].slice(0, 6));
+    setLogs((prev) => [log, ...prev].slice(0, 8));
   };
 
   const normalizeUserId = (raw: string) =>
@@ -409,7 +552,9 @@ export default function App() {
   }, [tab, state, userId, userDirectory]);
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#f4f4f1] pt-3 md:pt-4 font-sans text-neutral-900">
+    <main ref={mainRef} className="relative overflow-hidden bg-[#f4f4f1] font-sans text-neutral-900">
+      {/* contentRef でコンテンツの自然サイズを計測。main 自体は計測対象外 */}
+      <div ref={contentRef} className="min-h-screen pt-3 md:pt-4">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-70"
@@ -425,20 +570,18 @@ export default function App() {
       />
       <header className="relative border-b border-neutral-300/80 backdrop-blur-[1px]">
         <div
-          className={`mx-auto flex w-full flex-col gap-8 md:flex-row md:items-end md:justify-between ${
-            IS_DEV
-              ? "max-w-6xl px-6 py-10 md:py-12 lg:px-8"
-              : "max-w-[96rem] px-10 py-8 md:px-14 md:py-10 lg:px-16"
-          }`}
+          className={`mx-auto flex w-full flex-col gap-8 md:flex-row md:items-end md:justify-between ${IS_DEV
+            ? "max-w-6xl px-6 py-10 md:py-12 lg:px-8"
+            : "max-w-[96rem] px-10 py-8 md:px-14 md:py-10 lg:px-16"
+            }`}
         >
           <div className="animate-fade-in mt-3 md:mt-4">
             <p className="mb-2 text-[0.65rem] font-medium uppercase tracking-[0.28em] text-neutral-400">
               Attendance
             </p>
             <h1
-              className={`${
-                IS_DEV ? "text-4xl md:text-5xl" : "text-5xl md:text-6xl"
-              } font-light tracking-tight text-neutral-900`}
+              className={`${IS_DEV ? "text-4xl md:text-5xl" : "text-5xl md:text-6xl"
+                } font-light tracking-tight text-neutral-900`}
             >
               勤怠
             </h1>
@@ -458,16 +601,14 @@ export default function App() {
       </header>
 
       <div
-        className={`mx-auto w-full ${
-          IS_DEV ? "max-w-6xl px-6 lg:px-8" : "max-w-[96rem] px-10 md:px-14 lg:px-16"
-        } ${tab === "analytics" ? (IS_DEV ? "py-6 md:py-8" : "py-8 md:py-10") : IS_DEV ? "py-14 md:py-20" : "py-12 md:py-16"}`}
+        className={`mx-auto w-full ${IS_DEV ? "max-w-6xl px-6 lg:px-8" : "max-w-[96rem] px-10 md:px-14 lg:px-16"
+          } ${tab === "analytics" ? (IS_DEV ? "py-6 md:py-8" : "py-8 md:py-10") : IS_DEV ? "py-14 md:py-20" : "py-12 md:py-16"}`}
       >
         {tab === "scan" && (
           <div
             key="scan"
-            className={`animate-fade-up rounded-2xl border border-neutral-300/80 bg-white/80 shadow-[0_20px_60px_rgba(0,0,0,0.06)] backdrop-blur-[2px] ${
-              IS_DEV ? "space-y-16 p-8 md:p-10" : "space-y-16 p-8 md:p-12"
-            }`}
+            className={`animate-fade-up rounded-2xl border border-neutral-300/80 bg-white/80 shadow-[0_20px_60px_rgba(0,0,0,0.06)] backdrop-blur-[2px] ${IS_DEV ? "space-y-16 p-8 md:p-10" : "space-y-16 p-8 md:p-12"
+              }`}
           >
             <div className={IS_DEV ? "flex flex-wrap items-end gap-6 border-b border-neutral-200/80 pb-8" : ""}>
               {IS_DEV && (
@@ -530,11 +671,9 @@ export default function App() {
 
             <section className={IS_DEV ? "min-h-[10rem]" : "min-h-[16rem]"}>
               <p
-                className={`${
-                  IS_DEV ? "max-w-2xl text-3xl md:text-4xl" : "max-w-5xl text-5xl md:text-6xl"
-                } whitespace-pre-line font-light leading-snug tracking-tight text-neutral-900 transition-opacity duration-500 ease-out ${
-                  state === "processing" ? "opacity-45" : "opacity-100"
-                }`}
+                className={`${IS_DEV ? "max-w-2xl text-3xl md:text-4xl" : "max-w-5xl text-5xl md:text-6xl"
+                  } whitespace-pre-line font-light leading-snug tracking-tight text-neutral-900 transition-opacity duration-500 ease-out ${state === "processing" ? "opacity-45" : "opacity-100"
+                  }`}
               >
                 {hint}
               </p>
@@ -544,32 +683,188 @@ export default function App() {
             </section>
 
             <section className={`border-t border-neutral-300/70 ${IS_DEV ? "pt-12" : "pt-14"}`}>
-              <h2 className="mb-8 text-[0.65rem] font-medium uppercase tracking-[0.22em] text-neutral-400">
+              <h2 className="mb-4 text-[0.65rem] font-medium uppercase tracking-[0.22em] text-neutral-400">
                 直近の記録
               </h2>
-              {logs.length === 0 ? (
-                <p className={`${IS_DEV ? "text-sm" : "text-base md:text-lg"} font-light text-neutral-400`}>
-                  記録はまだありません
-                </p>
-              ) : (
-                <ul className="space-y-0 divide-y divide-neutral-200/90">
-                  {logs.map((log, idx) => (
-                    <li
-                      key={`${log.at}-${idx}`}
-                      className={`flex flex-wrap items-baseline justify-between gap-4 transition-colors duration-300 first:pt-0 ${
-                        IS_DEV ? "py-4 text-sm" : "py-5 text-base md:text-lg"
-                      }`}
-                    >
-                      <span className="tabular-nums text-neutral-400">{log.at}</span>
-                      <span className="flex-1 font-medium text-neutral-800">{log.actor}</span>
-                      <span className="text-xs tracking-wider text-neutral-500">
-                        {log.result}
-                        {log.action ? ` · ${log.action}` : ""}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <div className="flex gap-0">
+                {/*
+                  左列 (slots 0-3) ｜仕切り線｜ 右列 (slots 4-7)
+                  各列内は上→下の縦スタック（4行×2列）
+                */}
+                {/* 左列: 新しい順 1～4件目 */}
+                <div className="flex flex-1 flex-col">
+                  {[0, 1, 2, 3].map((i) => {
+                    const log = logs[i];
+                    const resultLabel = log
+                      ? log.result === "success_in" ? "入室"
+                        : log.result === "success_out" ? "退室"
+                        : log.result === "blocked" ? "封鎖"
+                        : "エラー"
+                      : null;
+                    return (
+                      <div
+                        key={i}
+                        className={`flex items-center gap-2 border-b border-neutral-200/70 ${
+                          IS_DEV ? "py-2 text-sm" : "py-3 text-base"
+                        } ${!log ? "pointer-events-none select-none" : ""}`}
+                      >
+                        {log ? (
+                          <>
+                            <span className={`shrink-0 tabular-nums text-neutral-400 ${IS_DEV ? "text-xs" : "text-sm"}`}>{log.at}</span>
+                            <span className="min-w-0 flex-1 truncate font-medium text-neutral-800">{log.actor}</span>
+                            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[0.6rem] font-medium tracking-wide ${
+                              log.result === "success_in" ? "bg-emerald-100 text-emerald-700"
+                                : log.result === "success_out" ? "bg-red-100 text-red-700"
+                                : "bg-amber-100 text-amber-700"
+                            }`}>{resultLabel}</span>
+                          </>
+                        ) : (
+                          <span className="invisible select-none" aria-hidden>—</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* 中央仕切り線 */}
+                <div className={`shrink-0 self-stretch bg-neutral-300/70 ${IS_DEV ? "mx-4 w-px" : "mx-6 w-px"}`} aria-hidden />
+
+                {/* 右列: 新しい順 5～8件目 */}
+                <div className="flex flex-1 flex-col">
+                  {[4, 5, 6, 7].map((i) => {
+                    const log = logs[i];
+                    const resultLabel = log
+                      ? log.result === "success_in" ? "入室"
+                        : log.result === "success_out" ? "退室"
+                        : log.result === "blocked" ? "封鎖"
+                        : "エラー"
+                      : null;
+                    return (
+                      <div
+                        key={i}
+                        className={`flex items-center gap-2 border-b border-neutral-200/70 ${
+                          IS_DEV ? "py-2 text-sm" : "py-3 text-base"
+                        } ${!log ? "pointer-events-none select-none" : ""}`}
+                      >
+                        {log ? (
+                          <>
+                            <span className={`shrink-0 tabular-nums text-neutral-400 ${IS_DEV ? "text-xs" : "text-sm"}`}>{log.at}</span>
+                            <span className="min-w-0 flex-1 truncate font-medium text-neutral-800">{log.actor}</span>
+                            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[0.6rem] font-medium tracking-wide ${
+                              log.result === "success_in" ? "bg-emerald-100 text-emerald-700"
+                                : log.result === "success_out" ? "bg-red-100 text-red-700"
+                                : "bg-amber-100 text-amber-700"
+                            }`}>{resultLabel}</span>
+                          </>
+                        ) : (
+                          <span className="invisible select-none" aria-hidden>—</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+
+
+            <section className={`border-t border-neutral-300/70 ${IS_DEV ? "pt-10" : "pt-12"}`}>
+              <h2 className={`text-[0.65rem] font-medium uppercase tracking-[0.22em] text-neutral-400 ${IS_DEV ? "mb-6" : "mb-8"}`}>
+                滞在時間ランキング
+              </h2>
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:gap-8">
+                {[
+                  { title: "今週", weekLabel: weeklyRanking.thisWeekStart, rows: weeklyRanking.thisWeek },
+                  { title: "先週", weekLabel: weeklyRanking.lastWeekStart, rows: weeklyRanking.lastWeek }
+                ].map((group) => {
+                  const maxHours = group.rows.length > 0 ? group.rows[0].totalHours : 1;
+                  // 絵文字の代わりにCSSバッジを使う（Linux/RPi環境で絵文字フォントが無くても表示される）
+                  const rankBadge = (
+                    rank: number
+                  ) => {
+                    const configs = [
+                      { label: "1st", bg: "bg-amber-400", text: "text-white" },
+                      { label: "2nd", bg: "bg-neutral-400", text: "text-white" },
+                      { label: "3rd", bg: "bg-orange-400", text: "text-white" },
+                    ];
+                    if (rank <= 3) {
+                      const { label, bg, text } = configs[rank - 1];
+                      return (
+                        <span
+                          className={`inline-flex items-center justify-center rounded-md ${bg} ${text} font-bold leading-none tracking-tight ${IS_DEV ? "h-5 w-7 text-[0.55rem]" : "h-6 w-9 text-[0.6rem]"
+                            }`}
+                        >
+                          {label}
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className={`font-medium tabular-nums text-neutral-400 ${IS_DEV ? "text-xs" : "text-sm"
+                        }`}>{rank}</span>
+                    );
+                  };
+                  return (
+                    <div key={group.title} className="flex flex-col space-y-3 rounded-xl border border-neutral-200/60 bg-white/40 p-4 shadow-sm backdrop-blur-[1px]">
+                      <div className="flex items-baseline justify-between border-b border-neutral-200/80 pb-2">
+                        <h3 className={`font-medium tracking-widest text-neutral-700 ${IS_DEV ? "text-xs" : "text-sm"}`}>
+                          {group.title}
+                        </h3>
+                        {group.weekLabel && (
+                          <span className="text-[0.6rem] tracking-wider text-neutral-400">{group.weekLabel}〜</span>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        {group.rows.length === 0 ? (
+                          <p className={`${IS_DEV ? "text-sm" : "text-base md:text-lg"} py-2 font-light text-neutral-400`}>
+                            データがありません
+                          </p>
+                        ) : (
+                          group.rows.slice(0, 3).map((row) => {
+                            const barPct = Math.round((row.totalHours / maxHours) * 100);
+                            return (
+                              <div
+                                key={row.userId}
+                                className={`relative flex items-center gap-3 overflow-hidden rounded-xl border ${row.rank === 1
+                                  ? "border-amber-200/80 bg-amber-50/60"
+                                  : row.rank === 2
+                                    ? "border-neutral-300/80 bg-neutral-50/80"
+                                    : row.rank === 3
+                                      ? "border-orange-200/60 bg-orange-50/40"
+                                      : "border-neutral-200/60 bg-white/60"
+                                  } ${IS_DEV ? "px-3 py-2" : "px-4 py-3"}`}
+                              >
+                                <div
+                                  className={`absolute inset-y-0 left-0 transition-[width] duration-700 ease-smooth ${row.rank === 1
+                                    ? "bg-amber-100/60"
+                                    : row.rank === 2
+                                      ? "bg-neutral-100/60"
+                                      : row.rank === 3
+                                        ? "bg-orange-100/40"
+                                        : "bg-neutral-100/30"
+                                    }`}
+                                  style={{ width: `${barPct}%` }}
+                                  aria-hidden
+                                />
+                                <span className={`relative shrink-0 flex items-center justify-center ${IS_DEV ? "w-7" : "w-9"
+                                  }`}>
+                                  {rankBadge(row.rank)}
+                                </span>
+                                <span className={`relative flex-1 truncate font-medium text-neutral-800 ${IS_DEV ? "text-sm" : "text-base md:text-lg"
+                                  }`}>
+                                  {row.displayName}
+                                </span>
+                                <span className={`relative shrink-0 tabular-nums font-semibold ${row.rank === 1 ? "text-amber-700" : "text-neutral-600"
+                                  } ${IS_DEV ? "text-sm" : "text-base md:text-lg"}`}>
+                                  {row.totalHours}h
+                                </span>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </section>
           </div>
         )}
@@ -577,15 +872,13 @@ export default function App() {
         {tab === "analytics" && (
           <div
             key="analytics"
-            className={`animate-fade-up rounded-2xl border border-neutral-300/80 bg-white/80 shadow-[0_20px_60px_rgba(0,0,0,0.06)] backdrop-blur-[2px] ${
-              IS_DEV ? "space-y-5 p-6 md:p-8" : "space-y-8 p-8 md:p-10"
-            }`}
+            className={`animate-fade-up rounded-2xl border border-neutral-300/80 bg-white/80 shadow-[0_20px_60px_rgba(0,0,0,0.06)] backdrop-blur-[2px] ${IS_DEV ? "space-y-5 p-6 md:p-8" : "space-y-8 p-8 md:p-10"
+              }`}
           >
             {viewDataError && (
               <div
-                className={`border-l-2 border-red-600 bg-red-50/60 transition-opacity duration-500 text-red-950 ${
-                  IS_DEV ? "py-2 pl-3 pr-4 text-xs" : "py-3 pl-4 pr-5 text-sm md:text-base"
-                }`}
+                className={`border-l-2 border-red-600 bg-red-50/60 transition-opacity duration-500 text-red-950 ${IS_DEV ? "py-2 pl-3 pr-4 text-xs" : "py-3 pl-4 pr-5 text-sm md:text-base"
+                  }`}
                 role="alert"
               >
                 {viewDataError}
@@ -596,9 +889,8 @@ export default function App() {
               <div className={`flex flex-wrap items-end justify-between ${IS_DEV ? "gap-3 gap-y-2" : "gap-5 gap-y-3"}`}>
                 <div>
                   <p
-                    className={`font-medium uppercase tracking-[0.2em] text-neutral-400 ${
-                      IS_DEV ? "text-[0.6rem]" : "text-xs md:text-sm"
-                    }`}
+                    className={`font-medium uppercase tracking-[0.2em] text-neutral-400 ${IS_DEV ? "text-[0.6rem]" : "text-xs md:text-sm"
+                      }`}
                   >
                     週次平均 · 暦週（月曜始まり）
                     {weekStartLabel ? ` · ${weekStartLabel}〜` : ""}
@@ -629,9 +921,8 @@ export default function App() {
 
             <section className="rounded-xl border border-neutral-200/90 bg-white/85 p-4 md:p-5">
               <h2
-                className={`font-medium uppercase tracking-[0.2em] text-neutral-400 ${
-                  IS_DEV ? "mb-2 text-[0.6rem]" : "mb-3 text-xs md:text-sm"
-                }`}
+                className={`font-medium uppercase tracking-[0.2em] text-neutral-400 ${IS_DEV ? "mb-2 text-[0.6rem]" : "mb-3 text-xs md:text-sm"
+                  }`}
               >
                 ユーザー別 · 今週
               </h2>
@@ -641,9 +932,8 @@ export default function App() {
                 >
                   <thead>
                     <tr
-                      className={`border-b border-neutral-200 font-medium uppercase tracking-wider text-neutral-400 ${
-                        IS_DEV ? "text-[0.55rem]" : "text-[0.7rem] md:text-xs"
-                      }`}
+                      className={`border-b border-neutral-200 font-medium uppercase tracking-wider text-neutral-400 ${IS_DEV ? "text-[0.55rem]" : "text-[0.7rem] md:text-xs"
+                        }`}
                     >
                       <th className="pb-1.5 pr-2 font-medium">ユーザー</th>
                       <th className="pb-1.5 pr-2 font-normal">ID</th>
@@ -663,9 +953,8 @@ export default function App() {
                               <span className="min-w-0 truncate">{row.displayName}</span>
                               {row.isPresent ? (
                                 <span
-                                  className={`inline-flex shrink-0 items-center justify-center rounded-md border border-neutral-300/90 bg-neutral-100 px-1.5 py-[3px] font-medium leading-none tracking-wide text-neutral-700 ${
-                                    IS_DEV ? "text-[0.6rem]" : "text-xs md:text-sm"
-                                  }`}
+                                  className={`inline-flex shrink-0 items-center justify-center rounded-md border border-neutral-300/90 bg-neutral-100 px-1.5 py-[3px] font-medium leading-none tracking-wide text-neutral-700 ${IS_DEV ? "text-[0.6rem]" : "text-xs md:text-sm"
+                                    }`}
                                   aria-label="在室"
                                 >
                                   在室
@@ -674,9 +963,8 @@ export default function App() {
                             </span>
                           </td>
                           <td
-                            className={`whitespace-nowrap pr-2 font-mono text-neutral-500 ${
-                              IS_DEV ? "py-1 text-[0.7rem]" : "py-2 text-[0.9rem] md:text-base"
-                            }`}
+                            className={`whitespace-nowrap pr-2 font-mono text-neutral-500 ${IS_DEV ? "py-1 text-[0.7rem]" : "py-2 text-[0.9rem] md:text-base"
+                              }`}
                           >
                             {row.userId}
                           </td>
@@ -731,6 +1019,19 @@ export default function App() {
           </dl>
         </aside>
       )}
+      {/* ── ブラックアウトオーバーレイ（液晶焼け防止） ── */}
+      {!IS_DEV && isBlackout && (
+        <div
+          role="button"
+          aria-label="画面をタップして復帰"
+          tabIndex={0}
+          className="fixed inset-0 z-[9999] bg-black"
+          style={{ cursor: "none" }}
+          onClick={resetIdleTimer}
+          onKeyDown={resetIdleTimer}
+        />
+      )}
+      </div>{/* /contentRef wrapper */}
     </main>
   );
 }
