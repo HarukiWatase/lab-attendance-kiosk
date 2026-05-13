@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type ViewState =
   | "idle"
@@ -134,20 +134,21 @@ function TabLink({
     <button
       type="button"
       onClick={onClick}
-      className={`relative pb-3 text-sm font-medium tracking-[0.12em] transition-colors duration-300 ease-out ${
-        active ? "text-neutral-900" : "text-neutral-400 hover:text-neutral-600"
-      }`}
+      className={`relative pb-3 text-sm font-medium tracking-[0.12em] transition-colors duration-300 ease-out ${active ? "text-neutral-900" : "text-neutral-400 hover:text-neutral-600"
+        }`}
     >
       {children}
       <span
-        className={`absolute bottom-0 left-0 right-0 h-px origin-left bg-neutral-900 transition-transform duration-500 ease-smooth ${
-          active ? "scale-x-100" : "scale-x-0"
-        }`}
+        className={`absolute bottom-0 left-0 right-0 h-px origin-left bg-neutral-900 transition-transform duration-500 ease-smooth ${active ? "scale-x-100" : "scale-x-0"
+          }`}
         aria-hidden
       />
     </button>
   );
 }
+
+/** 無操作ブラックアウトまでの時間（ms）。開発時は無効化。 */
+const BLACKOUT_TIMEOUT_MS = 5 * 60 * 1000;
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("scan");
@@ -172,8 +173,64 @@ export default function App() {
   const [nowLabel, setNowLabel] = useState(() =>
     new Date().toLocaleString("ja-JP", { hour12: false })
   );
+  const [isBlackout, setIsBlackout] = useState(false);
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scanInputRef = useRef<HTMLInputElement>(null);
   const scannerBufferRef = useRef("");
+  const mainRef = useRef<HTMLElement>(null);
+
+  // 画面サイズに応じてコンテンツをスケーリング（スクロール不要にする）
+  const applyScale = useCallback(() => {
+    const el = mainRef.current;
+    if (!el) return;
+    // 一旦スケールをリセットしてナチュラルサイズを取得
+    el.style.transform = "none";
+    el.style.width = "";
+    el.style.height = "";
+    const naturalW = el.scrollWidth;
+    const naturalH = el.scrollHeight;
+    const vpW = window.innerWidth;
+    const vpH = window.innerHeight;
+    const scaleX = vpW / naturalW;
+    const scaleY = vpH / naturalH;
+    const scale = Math.min(scaleX, scaleY, 1); // 拡大はしない
+    if (scale < 1) {
+      el.style.transformOrigin = "top left";
+      el.style.transform = `scale(${scale})`;
+      // transform後の見た目サイズ分だけbodyがスクロールしないよう幅・高さを固定
+      el.style.width = `${vpW / scale}px`;
+      el.style.height = `${vpH / scale}px`;
+    }
+  }, []);
+
+  useEffect(() => {
+    applyScale();
+    window.addEventListener("resize", applyScale);
+    return () => window.removeEventListener("resize", applyScale);
+  }, [applyScale, tab]);
+
+  // ── スクリーンセーバー（液晶焼け防止）────────────────────────────
+  // 本番モードのみ有効。5分間無操作でブラックアウト。
+  const resetIdleTimer = useCallback(() => {
+    if (IS_DEV) return;
+    if (idleTimerRef.current !== null) clearTimeout(idleTimerRef.current);
+    setIsBlackout(false);
+    idleTimerRef.current = setTimeout(() => {
+      setIsBlackout(true);
+    }, BLACKOUT_TIMEOUT_MS);
+  }, []);
+
+  useEffect(() => {
+    if (IS_DEV) return;
+    const events = ["mousemove", "mousedown", "pointerdown", "keydown", "touchstart", "scroll"] as const;
+    const handler = () => resetIdleTimer();
+    events.forEach((ev) => window.addEventListener(ev, handler, { passive: true }));
+    resetIdleTimer(); // 初回タイマー起動
+    return () => {
+      events.forEach((ev) => window.removeEventListener(ev, handler));
+      if (idleTimerRef.current !== null) clearTimeout(idleTimerRef.current);
+    };
+  }, [resetIdleTimer]);
 
   const hint = useMemo(() => {
     if (state === "processing") return "処理しています";
@@ -479,7 +536,7 @@ export default function App() {
   }, [tab, state, userId, userDirectory]);
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#f4f4f1] pt-3 md:pt-4 font-sans text-neutral-900">
+    <main ref={mainRef} className="relative min-h-screen overflow-hidden bg-[#f4f4f1] pt-3 md:pt-4 font-sans text-neutral-900">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-70"
@@ -495,20 +552,18 @@ export default function App() {
       />
       <header className="relative border-b border-neutral-300/80 backdrop-blur-[1px]">
         <div
-          className={`mx-auto flex w-full flex-col gap-8 md:flex-row md:items-end md:justify-between ${
-            IS_DEV
-              ? "max-w-6xl px-6 py-10 md:py-12 lg:px-8"
-              : "max-w-[96rem] px-10 py-8 md:px-14 md:py-10 lg:px-16"
-          }`}
+          className={`mx-auto flex w-full flex-col gap-8 md:flex-row md:items-end md:justify-between ${IS_DEV
+            ? "max-w-6xl px-6 py-10 md:py-12 lg:px-8"
+            : "max-w-[96rem] px-10 py-8 md:px-14 md:py-10 lg:px-16"
+            }`}
         >
           <div className="animate-fade-in mt-3 md:mt-4">
             <p className="mb-2 text-[0.65rem] font-medium uppercase tracking-[0.28em] text-neutral-400">
               Attendance
             </p>
             <h1
-              className={`${
-                IS_DEV ? "text-4xl md:text-5xl" : "text-5xl md:text-6xl"
-              } font-light tracking-tight text-neutral-900`}
+              className={`${IS_DEV ? "text-4xl md:text-5xl" : "text-5xl md:text-6xl"
+                } font-light tracking-tight text-neutral-900`}
             >
               勤怠
             </h1>
@@ -528,16 +583,14 @@ export default function App() {
       </header>
 
       <div
-        className={`mx-auto w-full ${
-          IS_DEV ? "max-w-6xl px-6 lg:px-8" : "max-w-[96rem] px-10 md:px-14 lg:px-16"
-        } ${tab === "analytics" ? (IS_DEV ? "py-6 md:py-8" : "py-8 md:py-10") : IS_DEV ? "py-14 md:py-20" : "py-12 md:py-16"}`}
+        className={`mx-auto w-full ${IS_DEV ? "max-w-6xl px-6 lg:px-8" : "max-w-[96rem] px-10 md:px-14 lg:px-16"
+          } ${tab === "analytics" ? (IS_DEV ? "py-6 md:py-8" : "py-8 md:py-10") : IS_DEV ? "py-14 md:py-20" : "py-12 md:py-16"}`}
       >
         {tab === "scan" && (
           <div
             key="scan"
-            className={`animate-fade-up rounded-2xl border border-neutral-300/80 bg-white/80 shadow-[0_20px_60px_rgba(0,0,0,0.06)] backdrop-blur-[2px] ${
-              IS_DEV ? "space-y-16 p-8 md:p-10" : "space-y-16 p-8 md:p-12"
-            }`}
+            className={`animate-fade-up rounded-2xl border border-neutral-300/80 bg-white/80 shadow-[0_20px_60px_rgba(0,0,0,0.06)] backdrop-blur-[2px] ${IS_DEV ? "space-y-16 p-8 md:p-10" : "space-y-16 p-8 md:p-12"
+              }`}
           >
             <div className={IS_DEV ? "flex flex-wrap items-end gap-6 border-b border-neutral-200/80 pb-8" : ""}>
               {IS_DEV && (
@@ -600,11 +653,9 @@ export default function App() {
 
             <section className={IS_DEV ? "min-h-[10rem]" : "min-h-[16rem]"}>
               <p
-                className={`${
-                  IS_DEV ? "max-w-2xl text-3xl md:text-4xl" : "max-w-5xl text-5xl md:text-6xl"
-                } whitespace-pre-line font-light leading-snug tracking-tight text-neutral-900 transition-opacity duration-500 ease-out ${
-                  state === "processing" ? "opacity-45" : "opacity-100"
-                }`}
+                className={`${IS_DEV ? "max-w-2xl text-3xl md:text-4xl" : "max-w-5xl text-5xl md:text-6xl"
+                  } whitespace-pre-line font-light leading-snug tracking-tight text-neutral-900 transition-opacity duration-500 ease-out ${state === "processing" ? "opacity-45" : "opacity-100"
+                  }`}
               >
                 {hint}
               </p>
@@ -626,9 +677,8 @@ export default function App() {
                   {logs.map((log, idx) => (
                     <li
                       key={`${log.at}-${idx}`}
-                      className={`flex flex-wrap items-baseline justify-between gap-4 transition-colors duration-300 first:pt-0 ${
-                        IS_DEV ? "py-4 text-sm" : "py-5 text-base md:text-lg"
-                      }`}
+                      className={`flex flex-wrap items-baseline justify-between gap-4 transition-colors duration-300 first:pt-0 ${IS_DEV ? "py-4 text-sm" : "py-5 text-base md:text-lg"
+                        }`}
                     >
                       <span className="tabular-nums text-neutral-400">{log.at}</span>
                       <span className="flex-1 font-medium text-neutral-800">{log.actor}</span>
@@ -652,7 +702,31 @@ export default function App() {
                   { title: "先週", weekLabel: weeklyRanking.lastWeekStart, rows: weeklyRanking.lastWeek }
                 ].map((group) => {
                   const maxHours = group.rows.length > 0 ? group.rows[0].totalHours : 1;
-                  const rankMedals = ["🥇", "🥈", "🥉"];
+                  // 絵文字の代わりにCSSバッジを使う（Linux/RPi環境で絵文字フォントが無くても表示される）
+                  const rankBadge = (
+                    rank: number
+                  ) => {
+                    const configs = [
+                      { label: "1st", bg: "bg-amber-400", text: "text-white" },
+                      { label: "2nd", bg: "bg-neutral-400", text: "text-white" },
+                      { label: "3rd", bg: "bg-orange-400", text: "text-white" },
+                    ];
+                    if (rank <= 3) {
+                      const { label, bg, text } = configs[rank - 1];
+                      return (
+                        <span
+                          className={`inline-flex items-center justify-center rounded-md ${bg} ${text} font-bold leading-none tracking-tight ${IS_DEV ? "h-5 w-7 text-[0.55rem]" : "h-6 w-9 text-[0.6rem]"
+                            }`}
+                        >
+                          {label}
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className={`font-medium tabular-nums text-neutral-400 ${IS_DEV ? "text-xs" : "text-sm"
+                        }`}>{rank}</span>
+                    );
+                  };
                   return (
                     <div key={group.title} className="flex flex-col space-y-3 rounded-xl border border-neutral-200/60 bg-white/40 p-4 shadow-sm backdrop-blur-[1px]">
                       <div className="flex items-baseline justify-between border-b border-neutral-200/80 pb-2">
@@ -671,48 +745,40 @@ export default function App() {
                         ) : (
                           group.rows.slice(0, 3).map((row) => {
                             const barPct = Math.round((row.totalHours / maxHours) * 100);
-                            const medal = row.rank <= 3 ? rankMedals[row.rank - 1] : null;
                             return (
                               <div
                                 key={row.userId}
-                                className={`relative flex items-center gap-3 overflow-hidden rounded-xl border ${
-                                  row.rank === 1
-                                    ? "border-amber-200/80 bg-amber-50/60"
-                                    : row.rank === 2
-                                      ? "border-neutral-300/80 bg-neutral-50/80"
-                                      : row.rank === 3
-                                        ? "border-orange-200/60 bg-orange-50/40"
-                                        : "border-neutral-200/60 bg-white/60"
-                                } ${IS_DEV ? "px-3 py-2" : "px-4 py-3"}`}
+                                className={`relative flex items-center gap-3 overflow-hidden rounded-xl border ${row.rank === 1
+                                  ? "border-amber-200/80 bg-amber-50/60"
+                                  : row.rank === 2
+                                    ? "border-neutral-300/80 bg-neutral-50/80"
+                                    : row.rank === 3
+                                      ? "border-orange-200/60 bg-orange-50/40"
+                                      : "border-neutral-200/60 bg-white/60"
+                                  } ${IS_DEV ? "px-3 py-2" : "px-4 py-3"}`}
                               >
                                 <div
-                                  className={`absolute inset-y-0 left-0 transition-[width] duration-700 ease-smooth ${
-                                    row.rank === 1
-                                      ? "bg-amber-100/60"
-                                      : row.rank === 2
-                                        ? "bg-neutral-100/60"
-                                        : row.rank === 3
-                                          ? "bg-orange-100/40"
-                                          : "bg-neutral-100/30"
-                                  }`}
+                                  className={`absolute inset-y-0 left-0 transition-[width] duration-700 ease-smooth ${row.rank === 1
+                                    ? "bg-amber-100/60"
+                                    : row.rank === 2
+                                      ? "bg-neutral-100/60"
+                                      : row.rank === 3
+                                        ? "bg-orange-100/40"
+                                        : "bg-neutral-100/30"
+                                    }`}
                                   style={{ width: `${barPct}%` }}
                                   aria-hidden
                                 />
-                                <span className={`relative shrink-0 ${IS_DEV ? "w-6 text-base" : "w-8 text-xl"} text-center`}>
-                                  {medal ?? (
-                                    <span className={`font-medium tabular-nums text-neutral-400 ${
-                                      IS_DEV ? "text-xs" : "text-sm"
-                                    }`}>{row.rank}</span>
-                                  )}
+                                <span className={`relative shrink-0 flex items-center justify-center ${IS_DEV ? "w-7" : "w-9"
+                                  }`}>
+                                  {rankBadge(row.rank)}
                                 </span>
-                                <span className={`relative flex-1 truncate font-medium text-neutral-800 ${
-                                  IS_DEV ? "text-sm" : "text-base md:text-lg"
-                                }`}>
+                                <span className={`relative flex-1 truncate font-medium text-neutral-800 ${IS_DEV ? "text-sm" : "text-base md:text-lg"
+                                  }`}>
                                   {row.displayName}
                                 </span>
-                                <span className={`relative shrink-0 tabular-nums font-semibold ${
-                                  row.rank === 1 ? "text-amber-700" : "text-neutral-600"
-                                } ${IS_DEV ? "text-sm" : "text-base md:text-lg"}`}>
+                                <span className={`relative shrink-0 tabular-nums font-semibold ${row.rank === 1 ? "text-amber-700" : "text-neutral-600"
+                                  } ${IS_DEV ? "text-sm" : "text-base md:text-lg"}`}>
                                   {row.totalHours}h
                                 </span>
                               </div>
@@ -731,15 +797,13 @@ export default function App() {
         {tab === "analytics" && (
           <div
             key="analytics"
-            className={`animate-fade-up rounded-2xl border border-neutral-300/80 bg-white/80 shadow-[0_20px_60px_rgba(0,0,0,0.06)] backdrop-blur-[2px] ${
-              IS_DEV ? "space-y-5 p-6 md:p-8" : "space-y-8 p-8 md:p-10"
-            }`}
+            className={`animate-fade-up rounded-2xl border border-neutral-300/80 bg-white/80 shadow-[0_20px_60px_rgba(0,0,0,0.06)] backdrop-blur-[2px] ${IS_DEV ? "space-y-5 p-6 md:p-8" : "space-y-8 p-8 md:p-10"
+              }`}
           >
             {viewDataError && (
               <div
-                className={`border-l-2 border-red-600 bg-red-50/60 transition-opacity duration-500 text-red-950 ${
-                  IS_DEV ? "py-2 pl-3 pr-4 text-xs" : "py-3 pl-4 pr-5 text-sm md:text-base"
-                }`}
+                className={`border-l-2 border-red-600 bg-red-50/60 transition-opacity duration-500 text-red-950 ${IS_DEV ? "py-2 pl-3 pr-4 text-xs" : "py-3 pl-4 pr-5 text-sm md:text-base"
+                  }`}
                 role="alert"
               >
                 {viewDataError}
@@ -750,9 +814,8 @@ export default function App() {
               <div className={`flex flex-wrap items-end justify-between ${IS_DEV ? "gap-3 gap-y-2" : "gap-5 gap-y-3"}`}>
                 <div>
                   <p
-                    className={`font-medium uppercase tracking-[0.2em] text-neutral-400 ${
-                      IS_DEV ? "text-[0.6rem]" : "text-xs md:text-sm"
-                    }`}
+                    className={`font-medium uppercase tracking-[0.2em] text-neutral-400 ${IS_DEV ? "text-[0.6rem]" : "text-xs md:text-sm"
+                      }`}
                   >
                     週次平均 · 暦週（月曜始まり）
                     {weekStartLabel ? ` · ${weekStartLabel}〜` : ""}
@@ -783,9 +846,8 @@ export default function App() {
 
             <section className="rounded-xl border border-neutral-200/90 bg-white/85 p-4 md:p-5">
               <h2
-                className={`font-medium uppercase tracking-[0.2em] text-neutral-400 ${
-                  IS_DEV ? "mb-2 text-[0.6rem]" : "mb-3 text-xs md:text-sm"
-                }`}
+                className={`font-medium uppercase tracking-[0.2em] text-neutral-400 ${IS_DEV ? "mb-2 text-[0.6rem]" : "mb-3 text-xs md:text-sm"
+                  }`}
               >
                 ユーザー別 · 今週
               </h2>
@@ -795,9 +857,8 @@ export default function App() {
                 >
                   <thead>
                     <tr
-                      className={`border-b border-neutral-200 font-medium uppercase tracking-wider text-neutral-400 ${
-                        IS_DEV ? "text-[0.55rem]" : "text-[0.7rem] md:text-xs"
-                      }`}
+                      className={`border-b border-neutral-200 font-medium uppercase tracking-wider text-neutral-400 ${IS_DEV ? "text-[0.55rem]" : "text-[0.7rem] md:text-xs"
+                        }`}
                     >
                       <th className="pb-1.5 pr-2 font-medium">ユーザー</th>
                       <th className="pb-1.5 pr-2 font-normal">ID</th>
@@ -817,9 +878,8 @@ export default function App() {
                               <span className="min-w-0 truncate">{row.displayName}</span>
                               {row.isPresent ? (
                                 <span
-                                  className={`inline-flex shrink-0 items-center justify-center rounded-md border border-neutral-300/90 bg-neutral-100 px-1.5 py-[3px] font-medium leading-none tracking-wide text-neutral-700 ${
-                                    IS_DEV ? "text-[0.6rem]" : "text-xs md:text-sm"
-                                  }`}
+                                  className={`inline-flex shrink-0 items-center justify-center rounded-md border border-neutral-300/90 bg-neutral-100 px-1.5 py-[3px] font-medium leading-none tracking-wide text-neutral-700 ${IS_DEV ? "text-[0.6rem]" : "text-xs md:text-sm"
+                                    }`}
                                   aria-label="在室"
                                 >
                                   在室
@@ -828,9 +888,8 @@ export default function App() {
                             </span>
                           </td>
                           <td
-                            className={`whitespace-nowrap pr-2 font-mono text-neutral-500 ${
-                              IS_DEV ? "py-1 text-[0.7rem]" : "py-2 text-[0.9rem] md:text-base"
-                            }`}
+                            className={`whitespace-nowrap pr-2 font-mono text-neutral-500 ${IS_DEV ? "py-1 text-[0.7rem]" : "py-2 text-[0.9rem] md:text-base"
+                              }`}
                           >
                             {row.userId}
                           </td>
@@ -884,6 +943,18 @@ export default function App() {
             </div>
           </dl>
         </aside>
+      )}
+      {/* ── ブラックアウトオーバーレイ（液晶焼け防止） ── */}
+      {!IS_DEV && isBlackout && (
+        <div
+          role="button"
+          aria-label="画面をタップして復帰"
+          tabIndex={0}
+          className="fixed inset-0 z-[9999] bg-black"
+          style={{ cursor: "none" }}
+          onClick={resetIdleTimer}
+          onKeyDown={resetIdleTimer}
+        />
       )}
     </main>
   );
