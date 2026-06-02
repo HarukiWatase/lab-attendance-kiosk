@@ -7,7 +7,9 @@ function sendMonthlyAttendanceReport() {
   // 1. メール固有の設定項目
   // -----------------------------------------
   const MAIL_CONFIG = {
+    TO_NAME: "00先生",
     TO_ADDRESS: "dummy_professor@example.com",
+    CC_NAME: "研究室の皆様",
     CC_ADDRESS: "dummy_lab_members@example.com",
     SENDER_NAME: "担当者名",
     SENDER_EMAIL: "dummy_tantou@example.com"
@@ -30,7 +32,7 @@ function sendMonthlyAttendanceReport() {
   // -----------------------------------------
   // 3. 基本情報（日付）の取得と【期間外判定】
   // -----------------------------------------
-  // A2セル：「集計基準日: 2026-04-30」から抽出
+  // A2セルから集計基準日を抽出
   const baseDateMatch = String(data[1][0]).match(/(\d{4})-(\d{2})-(\d{2})/);
   if (!baseDateMatch) return;
   const reportYear = parseInt(baseDateMatch[1], 10);
@@ -40,7 +42,7 @@ function sendMonthlyAttendanceReport() {
   const asOfDate = new Date(reportYear, reportMonth - 1, reportDay);
   const targetMonthStart = new Date(reportYear, reportMonth - 1, 1);
 
-  // A3セル：「学期期間: 2026-04-07 〜 2026-08-13」から抽出
+  // A3セルから学期期間を抽出
   const periodMatch = String(data[2][0]).match(/(\d{4})-(\d{2})-(\d{2}) 〜 (\d{4})-(\d{2})-(\d{2})/);
   if (!periodMatch) return;
   const termStart = new Date(parseInt(periodMatch[1], 10), parseInt(periodMatch[2], 10) - 1, parseInt(periodMatch[3], 10));
@@ -59,7 +61,7 @@ function sendMonthlyAttendanceReport() {
   // -----------------------------------------
   // 4. A4セルから【目標数値】の動的取得
   // -----------------------------------------
-  // A4セル：「公式週数 N=15 / 目標週平均 15h/週」から抽出
+  // A4セルから公式週数と目標週平均を抽出
   const a4Text = String(data[3][0]);
   const nMatch = a4Text.match(/N=(\d+(?:\.\d+)?)/);
   const hMatch = a4Text.match(/(\d+(?:\.\d+)?)h\/週/);
@@ -100,8 +102,8 @@ function sendMonthlyAttendanceReport() {
   const subject = `【研究室在室管理】${reportMonth}月度 研究室在室時間の集計結果について`;
 
   // ※インデントを入れるとメール本文にも空白が入るため、左詰めで記述
-  const body = `朝香先生
-Cc.研究室の皆様
+  const body = `${MAIL_CONFIG.TO_NAME}
+cc.${MAIL_CONFIG.CC_NAME}
 
 お疲れ様です。${MAIL_CONFIG.SENDER_NAME}です。
 ${reportMonth}月度（${periodText}：経過週数${passedWeeks}週）の研究室在室時間の集計が完了いたしましたので、概要をご報告いたします。
