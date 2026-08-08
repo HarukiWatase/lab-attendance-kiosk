@@ -58,7 +58,7 @@
 - `GAS_WEBHOOK_URL=<GAS Webhook URL>`
 - `GAS_SHARED_SECRET=<任意の長いランダム文字列>`
 - `AUTO_FIX_HOURS=0`
-- `COOLDOWN_SECONDS=180`
+- `COOLDOWN_SECONDS=30`
 - `REQUEST_TIMEOUT_SEC=5`
 
 運用ルール:
@@ -93,7 +93,7 @@
 
 ### 3-3. クールダウン処理
 
-- 同一 `user_id` の直近成功打刻から3分（`COOLDOWN_SECONDS`）はブロック
+- 同一 `user_id` の直近成功打刻から30秒（`COOLDOWN_SECONDS`）はブロック
 - ブロック時:
   - HTTP `409`
   - エラーコード `COOLDOWN_ACTIVE`
